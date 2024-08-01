@@ -5,7 +5,7 @@ __lua__
 -- by fletch
 -- made for lowrezjam 2024
 
-local debug = true
+local debug = false
 
 -- camera
 local zoom = 1
@@ -61,6 +61,10 @@ function _update()
         zoom_target = 1
     end
 
+	if btnp(4) then
+		mode = mode == "FLIGHT" and "PLAN" or "FLIGHT"
+	end
+
     zoom = lerp(zoom, zoom_target, 0.2)
 end
 
@@ -77,13 +81,18 @@ function _draw()
 	camera(cam.x, cam.y)
 
 	-- draw the background
-	-- TODO: when in planning mode, draw map in greyscale (palette swap)
+	if mode == "PLAN" then
+		-- set ground to grayscale
+		pal({[0]=0,129,128,128,134,133,134,134,136,9,10,133,12,141,14,15},1)
+	else
+		-- reset to default
+		pal()
+	end
 	map(0, 0, 0, 0, 32, 32)
 
 	-- animate our flag
 	spr(flag_num, 194, 116)
 	spr(flag_num, 194, 140)
-	-- end greyscale
 
     -- end game draw operations
 
@@ -111,8 +120,12 @@ function _draw()
     -- video remap back to defaults (screen is the screen, spritesheet is the spritesheet)
     poke(0x5f54, 0x00)
 
+	-- mode
+	rectfill(0, 58, #mode*4-1, 63, 0)
+	print(mode, 0, 58, 7)
+
 	if debug then
-		rectfill(0, 0, 64, 6, 0)
+		rectfill(0, 0, 63, 6, 0)
 		print(stat(1), 0, 0, 7)
 	end
 end
