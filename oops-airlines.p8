@@ -62,13 +62,26 @@ local frame = 0
 
 local mode = "FLIGHT" -- "PLAN"
 
+local planes = {}
+
 function game_update()
+	-- TODO: plane adding routine, increase difficulty as time goes on
+	if #planes < 1 then
+		add_plane()
+	end
+
     -- write any game update logic here
 	frame += 1
 	if frame % 5 == 0 then
 		flag_num = flag_num % 6 + 1
 	end
 
+	-- plane updates
+	for p in all(planes) do
+		p.update(p)
+	end
+
+	-- user input
 	if btn(k_left) and cam.x > 0 then
 		cam.x -= cam.speed
 	end
@@ -100,6 +113,77 @@ function game_update()
     zoom = lerp(zoom, zoom_target, 0.2)
 end
 
+-- adds a plane to the game
+local max_speed = 0.5
+local hangar = {x=186, y=128}
+function add_plane()
+	local plane = {}
+
+	-- TODO: randomize direction and location
+	plane.x = 32
+	plane.y = 32
+	-- nodes are represented as a queue
+	plane.nodes = _qnew()
+	_qpush(plane.nodes, {x=100,y=100})
+	_qpush(plane.nodes, {x=30,y=100})
+	_qpush(plane.nodes, {x=90,y=200})
+	_qpush(plane.nodes, hangar)
+
+	-- TODO: account for statuses
+	plane.status = "IDLE" -- "ROUTE", "LANDING"
+
+	plane.add_node = function(self, x, y)
+		_qpush(self.nodes, {x=x, y=y})
+	end
+
+	plane.update = function(self)
+		local next_node = _qpeek(self.nodes)
+		if (next_node == nil) or (dist(self, hangar) < max_speed) then
+			-- TODO: land the plane
+			return
+		end
+
+		-- check if we reached our next node
+		if dist(self, next_node) < max_speed then
+			_qpop(self.nodes) -- remove the current entry
+			next_node = _qpeek(self.nodes)
+		end
+		
+		-- move towards destination
+		local theta = angle(self, next_node)
+		self.x -= cos(theta) * max_speed
+		self.y -= sin(theta) * max_speed
+	end
+
+	plane.draw = function(self)
+		local next_node = _qpeek(self.nodes)
+		local theta = angle(self, next_node)
+		if theta <= 0.0625 or theta > 0.9375 then -- right
+			spr(18, self.x, self.y, 2, 2, true)
+		elseif theta > 0.0625 and theta <= 0.1875 then -- down right
+			spr(20, self.x, self.y, 2, 2, true, true)
+		elseif theta > 0.1875 and theta <= 0.3125 then -- down
+			spr(16, self.x, self.y, 2, 2, true, true)
+		elseif theta > 0.3125 and theta <= 0.4375 then -- down left
+			spr(20, self.x, self.y, 2, 2, false, true)
+		elseif theta > 0.4375 and theta <= 0.5625 then -- left
+			spr(18, self.x, self.y, 2, 2, false)
+		elseif theta > 0.5625 and theta <= 0.6875 then -- up left
+			spr(20, self.x, self.y, 2, 2, false, false)
+		elseif theta > 0.6875 and theta <= 0.8125 then -- up
+			spr(16, self.x, self.y, 2, 2, true)
+		elseif theta > 0.8125 and theta <= 0.9375 then -- up right
+			spr(20, self.x, self.y, 2, 2, true)
+		end
+	end
+
+	plane.nodes_draw = function(self)
+
+	end
+
+	add(planes, plane)
+end
+
 function game_draw()
     -- set video mode to 128x128
     poke(0x5f2c, 0)
@@ -127,6 +211,11 @@ function game_draw()
 	spr(flag_num, 194, 140)
 
 	draw_play_area_border()
+
+	-- plane drawing
+	for p in all(planes) do
+		p.draw(p)
+	end
     -- end game draw operations
 
     -- set video mode to 64x64
@@ -170,20 +259,20 @@ function draw_airport_arrow()
 	local cx,cy = cam.x + 64, cam.y + 64 -- center of the screen
 	local ax,ay = 192, 136 -- center of airport runway
 
-	local angle = atan2(ax-cx, ay-cy)
-	local dist = sqrt((ax-cx)*(ax-cx)+(ay-cy)*(ay-cy))
+	local theta = atan2(ax-cx, ay-cy)
+	local distance = sqrt((ax-cx)*(ax-cx)+(ay-cy)*(ay-cy))
 
 	-- if the hangar is on the screen, just don't show
-	if dist / (1/zoom) <= 32 then return end
+	if distance / (1/zoom) <= 32 then return end
 
-	local sy = sin(angle) * 20 + 28
-	local sx = cos(angle) * 20 + 32
+	local sy = sin(theta) * 20 + 28
+	local sx = cos(theta) * 20 + 32
 
-	if angle > 0.875 or angle < 0.125 then
+	if theta > 0.875 or theta < 0.125 then
 		spr(8, sx, sy)
-	elseif angle <= 0.875 and angle >= 0.5 then
+	elseif theta <= 0.875 and theta >= 0.5 then
 		spr(9, sx, sy, 1, 1, false, true)
-	elseif angle >= 0.125 and angle <= 0.5 then
+	elseif theta >= 0.125 and theta <= 0.5 then
 		spr(9, sx, sy)
 	end
 end
@@ -228,80 +317,48 @@ function lerp(from, to, amount)
     return from + (dist * amount)
 end
 
--- sprite rotation
--- https://www.lexaloffle.com/bbs/?tid=37561
--- num - sprite number
--- cx - centered x coordinate
--- cy - centered y coordinate
--- w - width in sprites
--- h - height in sprites
--- rot - rotation [0, 1)
--- scale - scale factor (size in pixels)
-function rotated_sprite(num, cx, cy, width, height, rot, scale)
-	-- change where the map region in memory is
-	poke(0x5f56, 0xe0)
-	  
-	-- mset the sprite from the spritesheet
-    for j=0,width-1 do
-        for i=0,height-1 do
-	        mset(i, j, num + (j*16+i))
-        end
-    end
-	  
-	-- tline routine
-	local c,s=cos(rot),-sin(rot)
-	local p={
-		{x=0,y=0,u=0,v=0},
-		{x=scale,y=0,u=width,v=0},
-		{x=scale,y=scale,u=width,v=height},
-		{x=0,y=scale,u=0,v=height}}
-	local w=(scale-1)/2
-	for _,v in pairs(p) do
-		local x,y=v.x-w,v.y-w
-		v.x=c*x-s*y
-		v.y=s*x+c*y
+-- vector maths
+-- assumes a and b are tables with members x and y
+-- https://www.lexaloffle.com/bbs/?tid=36059
+function dist(a, b)
+	local dx = a.x-b.x
+	local dy = a.y-b.y
+	local maskx,masky=dx>>31,dy>>31
+	local a0,b0=(dx+maskx)^^maskx,(dy+masky)^^masky
+	if a0>b0 then
+		return a0*0.9609+b0*0.3984
 	end
-	tquad(p,cx,cy)
-	
-	-- change map region back to default
-	poke(0x5f56, 0x20)
+	return b0*0.9609+a0*0.3984
 end
-  
-function tquad(v,dx,dy)
-	local p0,spans=v[4],{}
-	local x0,y0,u0,v0=p0.x+dx,p0.y+dy,p0.u,p0.v
-	for i=1,4 do
-		local p1=v[i]
-		local x1,y1,u1,v1=p1.x+dx,p1.y+dy,p1.u,p1.v
-		local _x1,_y1,_u1,_v1=x1,y1,u1,v1
-		if(y0>y1) x0,y0,x1,y1,u0,v0,u1,v1=x1,y1,x0,y0,u1,v1,u0,v0
-		local dy=y1-y0
-		local dx,du,dv=(x1-x0)/dy,(u1-u0)/dy,(v1-v0)/dy
-		if(y0<0) x0-=y0*dx u0-=y0*du v0-=y0*dv y0=0
-		local cy0=ceil(y0)
-		local sy=cy0-y0
-		x0+=sy*dx
-		u0+=sy*du
-		v0+=sy*dv
-		for y=cy0,min(ceil(y1)-1,127) do
-			local span=spans[y]
-			if span then
-				local a,au,av,b,bu,bv=span.x,span.u,span.v,x0,u0,v0
-				if(a>b) a,au,av,b,bu,bv=b,bu,bv,a,au,av
-				local ca,cb,dab=ceil(a),ceil(b)-1,b-a
-				local sa,dau,dav=ca-a,(bu-au)/dab,(bv-av)/dab
-				if ca<=cb then
-					tline(ca,y,cb,y,au+sa*dau,av+sa*dav,dau,dav)
-				end
-				else
-					spans[y]={x=x0,u=u0,v=v0}
-				end
-			x0+=dx
-			u0+=du
-			v0+=dv
-		end
-		x0,y0,u0,v0=_x1,_y1,_u1,_v1
-	end
+
+
+-- assumes a and b are tables with members x and y
+function angle(a, b)
+	return atan2(a.x-b.x, a.y-b.y)
+end
+
+-- https://www.lua.org/pil/11.4.html
+-- basic queue implementation
+function _qnew()
+	return {first=0, last=0}
+end
+
+function _qpush(queue, value)
+	queue[queue.last] = value
+	queue.last += 1
+end
+
+function _qpeek(queue)
+	return queue[queue.first]
+end
+
+function _qpop(queue)
+	local first = queue.first
+	if first >= queue.last then return nil end
+	local value = queue[first]
+	queue[first] = nil
+	queue.first += 1
+	return value
 end
 
 __gfx__
