@@ -28,13 +28,16 @@ local k_down = 3
 local k_primary = 4
 local k_secondary = 5
 
+-- override button events with our own
+local _btn, _btnp = btn, btnp
+
 local current_update = nil
 local current_draw = nil
 
 local planes = {}
 local active_planes = {}
 local plan_plane = nil -- plane that is currently being route planned for
-local user_input_blocker = 25
+local user_input_blocker = false
 
 function _init()
     poke(0x5f2c, 3)
@@ -191,17 +194,12 @@ function game_update()
 
 	-- plan mode - no planes move, just set nodes on the current plane
 	elseif mode == "PLAN" then
-		if user_input_blocker > 0 then
-			user_input_blocker -= 1
+		-- TODO: make a cutscene system for this
+		-- local newcamx = lerp(cam.x, plan_plane.x-56, 0.1)
+		-- local newcamy = lerp(cam.y, plan_plane.y-56, 0.1)
 
-			local newcamx = lerp(cam.x, plan_plane.x-56, 0.1)
-			local newcamy = lerp(cam.y, plan_plane.y-56, 0.1)
-
-			if newcamx > 0 and newcamx < 128 then cam.x = newcamx end
-			if newcamy > 0 and newcamy < 128 then cam.y = newcamy end
-
-			return
-		end
+		-- if newcamx > 0 and newcamx < 128 then cam.x = newcamx end
+		-- if newcamy > 0 and newcamy < 128 then cam.y = newcamy end
 
 		if btn(k_left) and cam.x > 0 then
 			cam.x -= cam.speed
@@ -263,7 +261,6 @@ function add_plane(idx)
 		if dist_to_hangar < 5 then
 			mode = "FLIGHT"
 			plan_plane = nil
-			user_input_blocker = 25
 		end
 	end
 
@@ -301,6 +298,9 @@ function add_plane(idx)
 			-- move towards destination
 			self.x -= cos(self.theta) * max_speed
 			self.y -= sin(self.theta) * max_speed
+
+			-- TODO: check for collisions
+
 		elseif plane.status == "LANDING" then
 			self.altitude -= 1
 			self.x += 0.33
@@ -317,6 +317,8 @@ function add_plane(idx)
 
 				if #active_planes == 0 then
 					focused_plane = nil
+				else
+					focused_plane = planes[active_planes[1]]
 				end
 			end
 		elseif plane.status == "IDLE" then
@@ -325,7 +327,7 @@ function add_plane(idx)
 			self.x -= cos(self.theta) * max_speed
 			self.y -= sin(self.theta) * max_speed
 
-			if self.x > 32 and self.x < 224 and self.y > 32 and self.y < 224 then
+			if self.x > 32 and self.x < 192 and self.y > 32 and self.y < 192 then
 				-- activate PLAN mode for this plane
 				mode = "PLAN"
 				self.status = "ROUTING"
@@ -581,6 +583,17 @@ function _qpop(queue)
 	queue[first] = nil
 	queue.first += 1
 	return value
+end
+
+-- stop user input if we want
+function btn(num)
+	if user_input_blocker then return false end
+	return _btn(num)
+end
+
+function btnp(num)
+	if user_input_blocker then return false end
+	return _btnp(num)
 end
 
 __gfx__
