@@ -202,7 +202,6 @@ local hangar = {x=186, y=128}
 function add_plane()
 	local plane = {}
 
-	-- TODO: randomize direction and location
 	plane.x = -100
 	plane.y = -100
 	-- nodes are represented as a queue
@@ -210,7 +209,6 @@ function add_plane()
 	plane.next_node = nil
 	plane.theta = nil
 
-	-- TODO: account for statuses
 	plane.status = "POOLED" -- "POOLED", "IDLE", ROUTING", "LANDING"
 	plane.altitude = 80
 
