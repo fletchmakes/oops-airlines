@@ -5,7 +5,20 @@ __lua__
 -- by fletch
 -- made for lowrezjam 2024
 
-local debug = false
+-- FLIGHT MODE CONTROLS
+-- zoomed in:
+--   - left / right - switch focus between planes
+--   - X - zoom out
+-- zoomed out:
+--   - left / right / up / down - slowly pan the camera
+--   - X - zoom in
+
+-- PATH MODE CONTROLS
+--   - left / right / up / down - slowly pan the camera
+--   - Z - place node / pickup node
+--   - (hold) X - zoom out
+
+local debug = true
 
 -- key constants
 local k_left = 0
@@ -18,10 +31,17 @@ local k_secondary = 5
 local current_update = nil
 local current_draw = nil
 
+local planes = {}
+
 function _init()
     poke(0x5f2c, 3)
 	current_update = splashscreen_update
 	current_draw = splashscreen_draw
+
+	-- get 10 planes pooled and ready to be activated
+	for i=1,10 do
+		add_plane()
+	end
 end
 
 function _update()
@@ -62,14 +82,7 @@ local frame = 0
 
 local mode = "FLIGHT" -- "PLAN"
 
-local planes = {}
-
 function game_update()
-	-- TODO: plane adding routine, increase difficulty as time goes on
-	if #planes < 1 then
-		add_plane()
-	end
-
     -- write any game update logic here
 	frame += 1
 	if frame % 5 == 0 then
@@ -77,8 +90,10 @@ function game_update()
 	end
 
 	-- plane updates
-	for p in all(planes) do
-		p.update(p)
+	if mode == "FLIGHT" then
+		for p in all(planes) do
+			if p.status ~= "POOLED" then p.update(p) end
+		end
 	end
 
 	-- user input
@@ -120,65 +135,106 @@ function add_plane()
 	local plane = {}
 
 	-- TODO: randomize direction and location
-	plane.x = 32
-	plane.y = 32
+	plane.x = -100
+	plane.y = -100
 	-- nodes are represented as a queue
 	plane.nodes = _qnew()
-	_qpush(plane.nodes, {x=100,y=100})
-	_qpush(plane.nodes, {x=30,y=100})
-	_qpush(plane.nodes, {x=90,y=200})
-	_qpush(plane.nodes, hangar)
+	plane.next_node = nil
+	plane.theta = nil
 
 	-- TODO: account for statuses
-	plane.status = "IDLE" -- "ROUTE", "LANDING"
+	plane.status = "POOLED" -- "POOLED", "IDLE", ROUTING", "LANDING"
+	plane.altitude = 80
 
 	plane.add_node = function(self, x, y)
 		_qpush(self.nodes, {x=x, y=y})
+		if (self.next_node == nil) then
+			self.next_node = _qpop(plane.nodes)
+			self.theta = angle(self, self.next_node)
+		end
+	end
+
+	plane.activate = function(self)
+		-- TODO: randomize start location and direction
+		self.status = "IDLE"
 	end
 
 	plane.update = function(self)
-		local next_node = _qpeek(self.nodes)
-		if (next_node == nil) or (dist(self, hangar) < max_speed) then
-			-- TODO: land the plane
-			return
+		-- check if we're landing
+		if self.status ~= "POOLED" and dist(self, hangar) < max_speed then
+			self.status = "LANDING"
 		end
 
-		-- check if we reached our next node
-		if dist(self, next_node) < max_speed then
-			_qpop(self.nodes) -- remove the current entry
-			next_node = _qpeek(self.nodes)
+		if plane.status == "ROUTING" then
+			-- check if we reached our next node
+			if dist(self, self.next_node) < max_speed then
+				self.next_node = _qpop(self.nodes) -- remove the current entry
+				self.theta = angle(self, self.next_node)
+			end
+			
+			-- move towards destination
+			self.x -= cos(self.theta) * max_speed
+			self.y -= sin(self.theta) * max_speed
+		elseif plane.status == "LANDING" then
+			self.altitude -= 1
+			self.x += 0.33
+			if self.altitude > 20 then self.y += 0.1237 end
+
+			if self.altitude <= 0 then
+				self.status = "POOLED" -- hold onto this object but wait out of sight
+				self.x = -100
+				self.y = -100
+			end
+		elseif plane.status == "IDLE" then
+			-- fly in a given direction
+			-- if we make it into the play area, request game focus, switch to planning mode, and prompt for a route
 		end
-		
-		-- move towards destination
-		local theta = angle(self, next_node)
-		self.x -= cos(theta) * max_speed
-		self.y -= sin(theta) * max_speed
 	end
 
 	plane.draw = function(self)
-		local next_node = _qpeek(self.nodes)
-		local theta = angle(self, next_node)
-		if theta <= 0.0625 or theta > 0.9375 then -- right
+		-- don't draw pooled objects
+		if self.status == "POOLED" then return end
+
+		-- landing sequence
+		if self.status == "LANDING" then
+			local s = max(self.altitude,20)/80
+			sspr(16, 8, 16, 16, self.x, self.y, 16*s, 16*s)
+			return
+		end
+
+		if self.theta <= 0.0625 or self.theta > 0.9375 then -- right
 			spr(18, self.x, self.y, 2, 2, true)
-		elseif theta > 0.0625 and theta <= 0.1875 then -- down right
+		elseif self.theta > 0.0625 and self.theta <= 0.1875 then -- down right
 			spr(20, self.x, self.y, 2, 2, true, true)
-		elseif theta > 0.1875 and theta <= 0.3125 then -- down
+		elseif self.theta > 0.1875 and self.theta <= 0.3125 then -- down
 			spr(16, self.x, self.y, 2, 2, true, true)
-		elseif theta > 0.3125 and theta <= 0.4375 then -- down left
+		elseif self.theta > 0.3125 and self.theta <= 0.4375 then -- down left
 			spr(20, self.x, self.y, 2, 2, false, true)
-		elseif theta > 0.4375 and theta <= 0.5625 then -- left
+		elseif self.theta > 0.4375 and self.theta <= 0.5625 then -- left
 			spr(18, self.x, self.y, 2, 2, false)
-		elseif theta > 0.5625 and theta <= 0.6875 then -- up left
+		elseif self.theta > 0.5625 and self.theta <= 0.6875 then -- up left
 			spr(20, self.x, self.y, 2, 2, false, false)
-		elseif theta > 0.6875 and theta <= 0.8125 then -- up
+		elseif self.theta > 0.6875 and self.theta <= 0.8125 then -- up
 			spr(16, self.x, self.y, 2, 2, true)
-		elseif theta > 0.8125 and theta <= 0.9375 then -- up right
+		elseif self.theta > 0.8125 and self.theta <= 0.9375 then -- up right
 			spr(20, self.x, self.y, 2, 2, true)
 		end
 	end
 
 	plane.nodes_draw = function(self)
+		if self.status ~= "ROUTING" then return end
 
+		-- draw current heading
+		line(self.x+8, self.y+8, self.next_node.x+8, self.next_node.y+8, 8)
+		circfill(self.next_node.x+8, self.next_node.y+8, 2, 8)
+
+		-- draw future headings
+		local cursor = self.next_node
+		for i=self.nodes.first,self.nodes.last-1 do
+			local n = self.nodes[i]
+			line(cursor.x+8, cursor.y+8, n.x+8, n.y+8, 8)
+			circfill(n.x+8, n.y+8, 2, 8)
+		end
 	end
 
 	add(planes, plane)
@@ -214,6 +270,7 @@ function game_draw()
 
 	-- plane drawing
 	for p in all(planes) do
+		p.nodes_draw(p)
 		p.draw(p)
 	end
     -- end game draw operations
