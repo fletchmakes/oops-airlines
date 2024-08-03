@@ -18,7 +18,7 @@ __lua__
 --   - Z - place node / pickup node
 --   - (hold) X - zoom out
 
-local debug = true
+local debug = false
 
 -- key constants
 local k_left = 0
@@ -32,6 +32,7 @@ local current_update = nil
 local current_draw = nil
 
 local planes = {}
+local active_planes = 0
 
 function _init()
     poke(0x5f2c, 3)
@@ -81,6 +82,8 @@ local flag_num = 1
 local frame = 0
 
 local mode = "FLIGHT" -- "PLAN"
+local focused_plane = -1 -- index into planes table
+local hangar = {x=192, y=136}
 
 function game_update()
     -- write any game update logic here
@@ -89,42 +92,107 @@ function game_update()
 		flag_num = flag_num % 6 + 1
 	end
 
-	-- plane updates
+	-- flight mode - just watch the planes fly - zoom out to pan, zoom back in to switch between planes
 	if mode == "FLIGHT" then
 		for p in all(planes) do
 			if p.status ~= "POOLED" then p.update(p) end
 		end
-	end
 
-	-- user input
-	if btn(k_left) and cam.x > 0 then
-		cam.x -= cam.speed
-	end
+		-- we're zoomed in, so we just switch between tracking planes
+		if zoom_target == 1 then
+			local cam_target = hangar
+			if focused_plane > 0 then
+				cam_target = planes[focused_plane]
+			end
 
-	if btn(k_right) and cam.x < 128 then
-		cam.x += cam.speed
-	end
+			local newcamx = lerp(cam.x, cam_target.x-64, 0.2)
+			local newcamy = lerp(cam.y, cam_target.y-64, 0.2)
 
-	if btn(k_up) and cam.y > 0 then
-		cam.y -= cam.speed
-	end
+			if newcamx > 0 and newcamx < 128 then cam.x = newcamx end
+			if newcamy > 0 and newcamy < 128 then cam.y = newcamy end
 
-	if btn(k_down) and cam.y < 128 then
-		cam.y += cam.speed
-	end
+			if btnp(k_left) and active_planes > 0 then
+				local new_target = -1
+				local cursor = focused_plane
+				-- search for the next unpooled plane
+				while new_target == -1 do
+					if cursor > 1 then 
+						cursor -= 1
+					else 
+						cursor = #planes 
+					end
+					
+					if planes[cursor].status ~= "POOLED" then new_target = cursor end
+				end
 
+				focused_plane = new_target
+			end
+
+			if btnp(k_right) and active_planes > 0 then
+				local new_target = -1
+				local cursor = focused_plane
+				-- search for the next unpooled plane
+				while new_target == -1 do
+					if cursor < #planes then 
+						cursor += 1
+					else 
+						cursor = 1 
+					end
+					
+					if planes[cursor].status ~= "POOLED" then new_target = cursor end
+				end
+				focused_plane = new_target
+			end
+		-- we're zoomed out, so allow the camera to pan	
+		else
+			if btn(k_left) and cam.x > 0 then
+				cam.x -= cam.speed
+			end
+	
+			if btn(k_right) and cam.x < 128 then
+				cam.x += cam.speed
+			end
+	
+			if btn(k_up) and cam.y > 0 then
+				cam.y -= cam.speed
+			end
+	
+			if btn(k_down) and cam.y < 128 then
+				cam.y += cam.speed
+			end
+		end
+
+		if btnp(5) then
+			zoom_target = zoom_target == 0.5 and 1 or 0.5
+		end
+
+	-- plan mode - no planes move, just set nodes on the current plane
+	elseif mode == "PLAN" then
+		if btn(k_left) and cam.x > 0 then
+			cam.x -= cam.speed
+		end
+
+		if btn(k_right) and cam.x < 128 then
+			cam.x += cam.speed
+		end
+
+		if btn(k_up) and cam.y > 0 then
+			cam.y -= cam.speed
+		end
+
+		if btn(k_down) and cam.y < 128 then
+			cam.y += cam.speed
+		end
+
+		-- TODO: keybinding for adding nodes to the current plane
+
+		if btn(5) then
+			zoom_target = 0.5
+		else
+			zoom_target = 1
+		end
+	end
     -- end game update logic
-
-    if btn(5) then
-        zoom_target = 0.5
-    else
-        zoom_target = 1
-    end
-
-	if btnp(4) then
-		mode = mode == "FLIGHT" and "PLAN" or "FLIGHT"
-	end
-
     zoom = lerp(zoom, zoom_target, 0.2)
 end
 
@@ -157,6 +225,7 @@ function add_plane()
 	plane.activate = function(self)
 		-- TODO: randomize start location and direction
 		self.status = "IDLE"
+		active_planes += 1
 	end
 
 	plane.update = function(self)
@@ -184,6 +253,7 @@ function add_plane()
 				self.status = "POOLED" -- hold onto this object but wait out of sight
 				self.x = -100
 				self.y = -100
+				active_planes -= 1
 			end
 		elseif plane.status == "IDLE" then
 			-- fly in a given direction
@@ -304,8 +374,7 @@ function game_draw()
 	draw_crosshair()
 
 	-- mode
-	rectfill(0, 58, #mode*4-1, 63, 0)
-	print(mode, 0, 58, 7)
+	draw_ui_overlay()
 end
 
 function draw_play_area_border()
@@ -314,7 +383,7 @@ end
 
 function draw_airport_arrow()
 	local cx,cy = cam.x + 64, cam.y + 64 -- center of the screen
-	local ax,ay = 192, 136 -- center of airport runway
+	local ax,ay = hangar.x, hangar.y -- center of airport runway
 
 	local theta = atan2(ax-cx, ay-cy)
 	local distance = sqrt((ax-cx)*(ax-cx)+(ay-cy)*(ay-cy))
@@ -335,7 +404,23 @@ function draw_airport_arrow()
 end
 
 function draw_crosshair()
-	spr(10, 28, 28)
+	if mode == "PLAN" then spr(10, 28, 28) end
+end
+
+function draw_ui_overlay()
+	rectfill(0, 56, 63, 63, 0)
+
+	if mode == "FLIGHT" then
+		spr(11, 0, 56)
+		if zoom_target == 1 then
+			print(chr(139)..chr(145)..chr(151), 41, 57, 7)
+		else -- 0.5
+			print(chr(139)..chr(145)..chr(148)..chr(131)..chr(151), 25, 57, 7)
+		end
+	else -- "PLAN"
+		spr(12, 0, 56)
+		print(chr(139)..chr(145)..chr(148)..chr(131)..chr(142)..chr(151), 17, 57, 7)
+	end
 end
 
 -->8
@@ -419,14 +504,14 @@ function _qpop(queue)
 end
 
 __gfx__
-00000000777770007777770077777770777077707770000077770000000000700000000000088000000000000000000000000000000000000000000000000000
-00000000688877006888877068878870687778706877777068877000000077000000080000888800007007000000000000000000000000000000000000000000
-00700700688887706888787068887770688787706887787068887770000707000000088008888880077007700000000000000000000000000000000000000000
-00077000688778706887777068887000688877006888877068888870700777770000088800000000000000000000000000000000000000000000000000000000
-00077000677777706777000067777000678870006788770067777770777777000000088800000000000000000000000000000000000000000000000000000000
-00700700600000006000000060000000677770006777700060000000077770000000088000000000077007700000000000000000000000000000000000000000
-00000000600000006000000060000000600000006000000060000000007070000000080000000000007007000000000000000000000000000000000000000000
-00000000600000006000000060000000600000006000000060000000007777000000000000000000000000000000000000000000000000000000000000000000
+00000000777770007777770077777770777077707770000077770000000000700000000000088000000000000000700000000700007777000077770000000000
+00000000688877006888877068878870687778706877777068877000000077000000080000888800007007000000700000007070070000700700007000000000
+00700700688887706888787068887770688787706887787068887770000707000000088008888880077007707007700000070007700770077070070700000000
+00077000688778706887777068887000688877006888877068888870700777770000088800000000000000007777777000700070707007077007700700000000
+00077000677777706777000067777000678870006788770067777770777777000000088800000000000000007777777707000700707007077007700700000000
+00700700600000006000000060000000677770006777700060000000077770000000088000000000077007707007700070007000700770077070070700000000
+00000000600000006000000060000000600000006000000060000000007070000000080000000000007007000000700077070000070000700700007000000000
+00000000600000006000000060000000600000006000000060000000007777000000000000000000000000000000700077700000007777000077770000000000
 000000777700000000007770000000000000000000000000bbb3333333bbbbbbbbb3333333bbbbbbbbb3333333bbbbbbbbb3333333bbbbbbbbb3333333bbbbbb
 000007788770000000007277000000000000000000777700bb333333333bbbbbbb333333333bbbbbbb333333333bbbbbbb333333333bbbbbbb333333333bbbbb
 000007866870000000007227770000000000000007788770b3333bbb332222222222222222222222222222bb3333bbbbb3333bbb3333bbbbb3333bbb3333bbbb
