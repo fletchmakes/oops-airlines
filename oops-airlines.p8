@@ -89,7 +89,8 @@ local frame = 0
 local mode = "FLIGHT" -- "PLAN"
 local focused_plane = nil
 local hangar = {x=192, y=136}
-local plane_spawner = 150 -- 10 seconds
+local plane_spawner = 90 -- 10 seconds
+local focus_scene = nil
 
 function game_update()
     -- write any game update logic here
@@ -102,7 +103,7 @@ function game_update()
 	if mode == "FLIGHT" then
 		plane_spawner -= 1
 		if plane_spawner <= 0 then 
-			plane_spawner = 150 + flr(rnd()*100)
+			plane_spawner = 100 + flr(rnd()*100)
 	
 			-- find a plane to spawn (one that is pooled)
 			for i=1,#planes do
@@ -194,12 +195,12 @@ function game_update()
 
 	-- plan mode - no planes move, just set nodes on the current plane
 	elseif mode == "PLAN" then
-		-- TODO: make a cutscene system for this
-		-- local newcamx = lerp(cam.x, plan_plane.x-56, 0.1)
-		-- local newcamy = lerp(cam.y, plan_plane.y-56, 0.1)
-
-		-- if newcamx > 0 and newcamx < 128 then cam.x = newcamx end
-		-- if newcamy > 0 and newcamy < 128 then cam.y = newcamy end
+		if focus_scene and costatus(focus_scene) ~= 'dead' then
+			coresume(focus_scene)
+			return
+		else
+			focus_scene = nil
+		end
 
 		if btn(k_left) and cam.x > 0 then
 			cam.x -= cam.speed
@@ -333,6 +334,26 @@ function add_plane(idx)
 				self.status = "ROUTING"
 				plan_plane = self
 				add(active_planes, self.idx)
+
+				-- move the camera to the plane
+				focus_scene = cocreate(function() 
+					user_input_blocker = true
+					local diffx, diffy = 999, 999
+					while diffx > 0.25 and diffy > 0.25 do
+						local lastcamx, lastcamy = cam.x, cam.y
+						local newcamx = lerp(cam.x, plan_plane.x-56, 0.1)
+						local newcamy = lerp(cam.y, plan_plane.y-56, 0.1)
+
+						if newcamx > 0 and newcamx < 128 then cam.x = newcamx end
+						if newcamy > 0 and newcamy < 128 then cam.y = newcamy end
+
+						diffx, diffy = abs(lastcamx - cam.x), abs(lastcamy - cam.y)
+
+						yield()
+					end
+
+					user_input_blocker = false
+				end)
 			end
 		end
 	end
