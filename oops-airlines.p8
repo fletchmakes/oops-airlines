@@ -250,6 +250,10 @@ function add_plane(idx)
 	plane.status = "POOLED" -- "POOLED", "IDLE", "ROUTING", "LANDING"
 	plane.altitude = 80
 
+	-- crude implementation of quadtrees - 256x256 area broken into cels of 32x32
+	plane.zone = -999
+	plane.collided = false
+
 	plane.add_node = function(self, x, y)
 		_qpush(self.nodes, {x=x, y=y})
 		if (self.next_node == nil) then
@@ -300,9 +304,33 @@ function add_plane(idx)
 			self.x -= cos(self.theta) * max_speed
 			self.y -= sin(self.theta) * max_speed
 
-			-- TODO: check for collisions
+			-- check for collisions
+			self.zone = flr(self.x / 32) * 8 + flr(self.y / 32)
+			for pidx in all(active_planes) do
+				if pidx ~= self.idx then -- don't try to collide with ourself
+					local p = planes[pidx]
+					if p.zone == self.zone or -- neighbor zone checks
+					   p.zone == self.zone - 1 or
+					   p.zone == self.zone + 1 or
+					   p.zone == self.zone - 8 or
+					   p.zone == self.zone + 8 or
+					   p.zone == self.zone - 9 or
+					   p.zone == self.zone - 7 or
+					   p.zone == self.zone + 9 or
+					   p.zone == self.zone + 7 then
+
+						if dist(self, p) < 16 then
+							-- TODO: start the explosion animation, pause gameplay, show end screen
+							self.collided = true
+							p.collided = true
+						end
+					end
+				end
+			end
 
 		elseif plane.status == "LANDING" then
+			self.zone = -999
+
 			self.altitude -= 1
 			self.x += 0.33
 			if self.altitude > 20 then self.y += 0.1237 end
