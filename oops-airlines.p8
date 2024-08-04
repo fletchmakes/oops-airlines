@@ -703,8 +703,8 @@ function pan_to_position(x, y)
 		local diffx, diffy = 999, 999
 		while diffx > 0.25 or diffy > 0.25 do
 			local lastcamx, lastcamy = cam.x, cam.y
-			local newcamx = lerp(cam.x, x-56, 0.1)
-			local newcamy = lerp(cam.y, y-56, 0.1)
+			local newcamx = lerp(cam.x, x-64, 0.1)
+			local newcamy = lerp(cam.y, y-64, 0.1)
 
 			if newcamx > 0 and newcamx < 128 then cam.x = newcamx end
 			if newcamy > 0 and newcamy < 128 then cam.y = newcamy end
