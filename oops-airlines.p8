@@ -18,7 +18,7 @@ __lua__
 --   - Z - place node / pickup node
 --   - (hold) X - zoom out
 
-local debug = true
+local debug = false
 
 -- key constants
 local k_left = 0
@@ -293,14 +293,14 @@ function game_draw()
 	draw_play_area_border()
 
 	-- plane drawing
-	for plane in all(active_planes) do
-		local p = planes[p]
+	for pl in all(active_planes) do
+		local p = planes[pl]
 		p.nodes_draw(p)
 	end
 
-	for p in all(active_planes) do
-		local p = planes[p]
-		p.nodes_draw(p)
+	for pl in all(active_planes) do
+		local p = planes[pl]
+		p.draw(p)
 	end
 
     resolve_particles()
@@ -339,7 +339,7 @@ function game_draw()
 end
 
 -- adds a plane to the game
-local hangar = {x=186, y=128}
+local airport = {x=186, y=128}
 local sprites = {16, 48, 80}
 local colors = {8, 12, 10}
 function add_plane(idx)
@@ -350,11 +350,10 @@ function add_plane(idx)
 	plane.idx = idx
 
 	-- choose what type of plane this will be
-	local type = rnd({1, 2, 3})
-	plane.type = type
-	plane.sprite = sprites[type]
-	plane.color = colors[type]
-	plane.speed = 0.25*type
+	plane.type = 1
+	plane.sprite = sprites[1]
+	plane.color = colors[1]
+	plane.speed = 0.25
 
 	-- nodes are represented as a queue
 	plane.nodes = _qnew()
@@ -363,6 +362,8 @@ function add_plane(idx)
 
 	plane.status = "POOLED" -- "POOLED", "IDLE", "ROUTING", "LANDING"
 	plane.altitude = 80
+
+	plane.smoke = {}
 
 	-- crude implementation of quadtrees - 256x256 area broken into cels of 32x32
 	plane.zone = -999
@@ -375,7 +376,7 @@ function add_plane(idx)
 		end
 
 		-- check if we've clicked the airfield
-		local dist_to_hangar = dist({x=x, y=y}, hangar)
+		local dist_to_hangar = dist({x=x, y=y}, airport)
 		if dist_to_hangar < 5 then
 			mode = "FLIGHT"
 			plan_plane = nil
@@ -387,23 +388,34 @@ function add_plane(idx)
 		self.status = "IDLE"
 
 		local pos = rnd() * 256
+		local opos = rnd({0, 256})
 		local x_or_y = rnd()
 
 		if x_or_y < 0.5 then
 			self.x = pos
-			self.y = 0
+			self.y = opos
 		else
-			self.x = 0
+			self.x = opos
 			self.y = pos
 		end
 
 		self.theta = angle(self, {x=128, y=128})
+
+		local type = rnd({1, 2, 3})
+		self.type = type
+		self.sprite = sprites[type]
+		self.color = colors[type]
+		self.speed = 0.25*type
+
+		self.altitude = 80
+		self.smoke = {}
 	end
 
 	plane.update = function(self)
 		-- check if we're landing
-		if self.status == "ROUTING" and dist(self, hangar) < 5 then
+		if self.status == "ROUTING" and dist(self, airport) < 5 then
 			self.status = "LANDING"
+			return
 		end
 
 		if plane.status == "ROUTING" then
@@ -434,13 +446,9 @@ function add_plane(idx)
 
 						local d = dist({x=self.x+8,y=self.y+8}, {x=p.x+8,y=p.y+8})
 						if d < 16 then
-							-- TODO: show end screen
 							local xsign, ysign = 0, 0
-							if self.x < p.x then xsign = 1 else xsign = -1 end
-							if self.y < p.y then ysign = -1 else ysign = 1 end
 							local theta = angle({x=self.x+8,y=self.y+8}, {x=p.x+8,y=p.y+8})
-							local midx, midy = self.x+8+cos(theta)*(d/2)*xsign,self.y+8+sin(theta)*(d/2)*ysign
-
+							local midx, midy = p.x+8+cos(theta)*(d/2),p.y+8+sin(theta)*(d/2)
 							mode = "GAMEOVER"
 							game_over_stuff.explosion = {x=midx, y=midy}
 							focus_scene = cocreate(pan_to_position(midx, midy))
@@ -501,6 +509,39 @@ function add_plane(idx)
 			return
 		end
 
+		-- smoke
+		if mode == "FLIGHT" then
+			for i=1,2 do
+				add(self.smoke, {
+					x=self.x+8,
+					y=self.y+8,
+					r=3,
+					dx=rnd(2)*cos(self.theta),
+					dy=rnd(2)*sin(self.theta),
+					dr=function(p) return p.r - 0.15 end,
+					c=function(p) return 7 end,
+					ttl=10
+				})
+			end
+		end
+
+		if #self.smoke > 0 then
+			for i=#self.smoke,1,-1 do
+				local p = self.smoke[i]
+				if mode == "FLIGHT" then
+					p.ttl -= 1
+					p.x += p.dx
+					p.y += p.dy
+					p.r = p.dr(p)
+
+					if p.ttl <= 0 then deli(self.smoke, i) end
+				end
+
+				circfill(p.x, p.y, p.r, p.c(p))
+			end
+		end
+
+		-- plane
 		if self.theta <= 0.0625 or self.theta > 0.9375 then -- right
 			spr(self.sprite + 2, self.x, self.y, 2, 2, true)
 		elseif self.theta > 0.0625 and self.theta <= 0.1875 then -- down right
@@ -650,7 +691,7 @@ function pan_to_position(x, y)
 	return function()
 		user_input_blocker = true
 		local diffx, diffy = 999, 999
-		while diffx > 0.25 and diffy > 0.25 do
+		while diffx > 0.25 or diffy > 0.25 do
 			local lastcamx, lastcamy = cam.x, cam.y
 			local newcamx = lerp(cam.x, x-56, 0.1)
 			local newcamy = lerp(cam.y, y-56, 0.1)
