@@ -18,7 +18,7 @@ __lua__
 --   - Z - place node / pickup node
 --   - (hold) X - zoom out
 
-local debug = false
+local debug = true
 
 -- key constants
 local k_left = 0
@@ -93,6 +93,9 @@ local focused_plane = nil
 local hangar = {x=192, y=136}
 local plane_spawner = 90 -- 10 seconds
 local focus_scene = nil
+local game_over_stuff = {
+	explosion = nil
+}
 
 function game_update()
     -- write any game update logic here
@@ -103,7 +106,19 @@ function game_update()
 
 	-- end-of-game updates
 	if mode == "GAMEOVER" then
-		-- TODO: play explosion effects
+		-- play explosion effects
+		for i=1,2 do
+			add(particles, {
+				x=game_over_stuff.explosion.x,
+				y=game_over_stuff.explosion.y,
+				r=8,
+				dx=rnd(2)-1,
+				dy=rnd(2)-1,
+				dr=function(p) return p.r/1.075 end,
+				c=function(p) return min(flr(((8-p.r)/(8))*4)+7,10) end,
+				ttl=30
+			},1)
+		end
 		
 		-- camera
 		if focus_scene and costatus(focus_scene) ~= 'dead' then
@@ -278,11 +293,14 @@ function game_draw()
 	draw_play_area_border()
 
 	-- plane drawing
-	for p in all(planes) do
-		if p.status ~= "POOLED" then
-			p.nodes_draw(p)
-			p.draw(p)
-		end
+	for plane in all(active_planes) do
+		local p = planes[p]
+		p.nodes_draw(p)
+	end
+
+	for p in all(active_planes) do
+		local p = planes[p]
+		p.nodes_draw(p)
 	end
 
     resolve_particles()
@@ -321,14 +339,22 @@ function game_draw()
 end
 
 -- adds a plane to the game
-local max_speed = 0.5
 local hangar = {x=186, y=128}
+local sprites = {16, 48, 80}
+local colors = {8, 12, 10}
 function add_plane(idx)
 	local plane = {}
 
 	plane.x = -100
 	plane.y = -100
 	plane.idx = idx
+
+	-- choose what type of plane this will be
+	local type = rnd({1, 2, 3})
+	plane.type = type
+	plane.sprite = sprites[type]
+	plane.color = colors[type]
+	plane.speed = 0.25*type
 
 	-- nodes are represented as a queue
 	plane.nodes = _qnew()
@@ -382,14 +408,14 @@ function add_plane(idx)
 
 		if plane.status == "ROUTING" then
 			-- check if we reached our next node
-			if dist(self, self.next_node) < max_speed then
+			if dist(self, self.next_node) < self.speed then
 				self.next_node = _qpop(self.nodes) -- remove the current entry
 				self.theta = angle(self, self.next_node)
 			end
 			
 			-- move towards destination
-			self.x -= cos(self.theta) * max_speed
-			self.y -= sin(self.theta) * max_speed
+			self.x -= cos(self.theta) * self.speed
+			self.y -= sin(self.theta) * self.speed
 
 			-- check for collisions
 			self.zone = flr(self.x / 32) * 8 + flr(self.y / 32)
@@ -406,12 +432,18 @@ function add_plane(idx)
 					   p.zone == self.zone + 9 or
 					   p.zone == self.zone + 7 then
 
-						if dist(self, p) < 16 then
-							-- TODO: start the explosion animation, pause gameplay, show end screen
-							-- TODO: only show collision effects on the point between planes
+						local d = dist({x=self.x+8,y=self.y+8}, {x=p.x+8,y=p.y+8})
+						if d < 16 then
+							-- TODO: show end screen
+							local xsign, ysign = 0, 0
+							if self.x < p.x then xsign = 1 else xsign = -1 end
+							if self.y < p.y then ysign = -1 else ysign = 1 end
+							local theta = angle({x=self.x+8,y=self.y+8}, {x=p.x+8,y=p.y+8})
+							local midx, midy = self.x+8+cos(theta)*(d/2)*xsign,self.y+8+sin(theta)*(d/2)*ysign
+
 							mode = "GAMEOVER"
-							-- TODO: focus on point between planes
-							focus_scene = cocreate(pan_to_position(self.x, self.y))
+							game_over_stuff.explosion = {x=midx, y=midy}
+							focus_scene = cocreate(pan_to_position(midx, midy))
 						end
 					end
 				end
@@ -442,8 +474,8 @@ function add_plane(idx)
 		elseif plane.status == "IDLE" then
 			-- fly in a given direction
 			-- if we make it into the play area, request game focus, switch to planning mode, and prompt for a route
-			self.x -= cos(self.theta) * max_speed
-			self.y -= sin(self.theta) * max_speed
+			self.x -= cos(self.theta) * self.speed
+			self.y -= sin(self.theta) * self.speed
 
 			if self.x > 32 and self.x < 192 and self.y > 32 and self.y < 192 then
 				-- activate PLAN mode for this plane
@@ -465,26 +497,26 @@ function add_plane(idx)
 		-- landing sequence
 		if self.status == "LANDING" then
 			local s = max(self.altitude,20)/80
-			sspr(16, 8, 16, 16, self.x, self.y, 16*s, 16*s)
+			sspr(16, 8+(self.type-1)*16, 16, 16, self.x, self.y, 16*s, 16*s)
 			return
 		end
 
 		if self.theta <= 0.0625 or self.theta > 0.9375 then -- right
-			spr(18, self.x, self.y, 2, 2, true)
+			spr(self.sprite + 2, self.x, self.y, 2, 2, true)
 		elseif self.theta > 0.0625 and self.theta <= 0.1875 then -- down right
-			spr(20, self.x, self.y, 2, 2, true, true)
+			spr(self.sprite + 4, self.x, self.y, 2, 2, true, true)
 		elseif self.theta > 0.1875 and self.theta <= 0.3125 then -- down
-			spr(16, self.x, self.y, 2, 2, true, true)
+			spr(self.sprite, self.x, self.y, 2, 2, true, true)
 		elseif self.theta > 0.3125 and self.theta <= 0.4375 then -- down left
-			spr(20, self.x, self.y, 2, 2, false, true)
+			spr(self.sprite + 4, self.x, self.y, 2, 2, false, true)
 		elseif self.theta > 0.4375 and self.theta <= 0.5625 then -- left
-			spr(18, self.x, self.y, 2, 2, false)
+			spr(self.sprite + 2, self.x, self.y, 2, 2, false)
 		elseif self.theta > 0.5625 and self.theta <= 0.6875 then -- up left
-			spr(20, self.x, self.y, 2, 2, false, false)
+			spr(self.sprite + 4, self.x, self.y, 2, 2, false, false)
 		elseif self.theta > 0.6875 and self.theta <= 0.8125 then -- up
-			spr(16, self.x, self.y, 2, 2, true)
+			spr(self.sprite, self.x, self.y, 2, 2, true)
 		elseif self.theta > 0.8125 and self.theta <= 0.9375 then -- up right
-			spr(20, self.x, self.y, 2, 2, true)
+			spr(self.sprite + 4, self.x, self.y, 2, 2, true)
 		end
 	end
 
@@ -493,8 +525,8 @@ function add_plane(idx)
 		if self.next_node == nil then return end
 
 		-- draw current heading
-		line(self.x+8, self.y+8, self.next_node.x+8, self.next_node.y+8, 8)
-		circfill(self.next_node.x+8, self.next_node.y+8, 2, 8)
+		line(self.x+8, self.y+8, self.next_node.x+8, self.next_node.y+8, self.color)
+		circfill(self.next_node.x+8, self.next_node.y+8, 2, self.color)
 
 		print(#self.nodes, 0, 0, 7)
 
@@ -502,8 +534,8 @@ function add_plane(idx)
 		local cursor = self.next_node
 		for i=self.nodes.first,self.nodes.last-1 do
 			local n = self.nodes[i]
-			line(cursor.x+8, cursor.y+8, n.x+8, n.y+8, 8)
-			circfill(n.x+8, n.y+8, 2, 8)
+			line(cursor.x+8, cursor.y+8, n.x+8, n.y+8, self.color)
+			circfill(n.x+8, n.y+8, 2, self.color)
 			cursor = n
 		end
 	end
@@ -713,36 +745,36 @@ __gfx__
 0007222222227000000072777000000000000777000000003b2444bbbbbb33333bbbbbbbbbbb33333bbbbbbbbb44423355555555555555555551116ddd6ddd65
 000777777777700000007770000000000000000000000000bb2444bb3bbbbbbbbbbb33333bbbbbbbbbbb3333bb4442bb57775557777777777551116ddd6ddd65
 000000777700000000007770000000000000000000000000bb2444bb33bbbbbbbbb3333333bbbbbbbbb33333bb4442bb57775557777777777551116ddd6ddd65
-000007711770000000007c77000000000000000000777700bb2444bb333bbbbbbb333333333bbbbbbb333333bb4442bb55555555555555555551116ddd6ddd65
-000007166170000000007cc7770000000000000007711770b32444bb3333bbbbb3333bbb3333bbbbb3333bbbbb4442bb57775555555555555551166ddd6ddd65
-0000076666700000777077ccc77000000077777777661170332444bbb3333bbb3333bbbbb3333bbb3333bbbbbb4442bb5777555555555555555666ddd6ddd655
-00007761167700007c70077ccc770000007cccccc1166170332444bbbb333333333bbbbbbb333333333bbbbbbb444233555555555555555555566ddd6ddd6555
-00077c1111c770007c777777ccc777700077cccc11116770332444bbbbb3333333bbbbbbbbb3333333bbbbbbbb44423357775555555555555556666666665555
-0077cc1111cc77007cc77cc111166177000777c1c11177003b2444bbbbbb33333bbbbbbbbbbb33333bbbbbbbbb44423357775555555555555555555555555555
-007ccc1111ccc7007ccccccc11116617000007cccc1c7000bb2444bb3bbbbbbbbbbb33333bbbbbbbbbbb3333bb4442bb55555555555555555555555555555555
-077cc71cc17cc7707ccccccc11116617077777ccc1cc7000bb2444bb33bbbbbbbbb3333333bbbbbbbbb33333bb4442bb77777777777777777777777777777777
-77cc77cccc77cc777cc77cc11116617707cc7ccccccc7000bb2444bb333bbbbbbb333333333bbbbbbb333333bb4442bbbb333333333bbbbbbb333333333bbbbb
-7cc777cccc777cc77c777777ccc77770077cccc777cc7000b32444bb3333bbbbb3333bbb3333bbbbb3333bbbbb4442bbb3333bbb3333bbbbb3333bbb3333bbbb
-7777077cc77077777c70077ccc7700000077cc7707cc7000332444bbb3333bbb3333bbbbb3333bbb3333bbbbbb4442bb3333bbbbb3333bbb3333bbbbb3333bbb
-0000077cc7700000777077ccc770000000077cc7077c7000332444bbbb333333333bbbbbbb333333333bbbbbbb444233333bbbbbbb333333333bbbbbbb333333
-000777cccc77700000007cc777000000000077c700777000332444bbbbb3333333bbbbbbbbb3333333bbbbbbbb44423333bbbbbbbbb3333333bbbbbbbbb33333
-0007cccccccc700000007c770000000000000777000000003b2444bbbbbb33333bbbbbbbbbbb33333bbbbbbbbb4442333bbbbbbbbbbb33333bbbbbbbbbbb3333
+0000077cc770000000007177000000000000000000777700bb2444bb333bbbbbbb333333333bbbbbbb333333bb4442bb55555555555555555551116ddd6ddd65
+000007c66c700000000071177700000000000000077cc770b32444bb3333bbbbb3333bbb3333bbbbb3333bbbbb4442bb57775555555555555551166ddd6ddd65
+00000766667000007770771117700000007777777766cc70332444bbb3333bbb3333bbbbb3333bbb3333bbbbbb4442bb5777555555555555555666ddd6ddd655
+0000776cc67700007170077111770000007111111cc66c70332444bbbb333333333bbbbbbb333333333bbbbbbb444233555555555555555555566ddd6ddd6555
+000771cccc177000717777771117777000771111cccc6770332444bbbbb3333333bbbbbbbbb3333333bbbbbbbb44423357775555555555555556666666665555
+007711cccc1177007117711cccc66c770007771c1ccc77003b2444bbbbbb33333bbbbbbbbbbb33333bbbbbbbbb44423357775555555555555555555555555555
+007111cccc11170071111111cccc66c70000071111c17000bb2444bb3bbbbbbbbbbb33333bbbbbbbbbbb3333bb4442bb55555555555555555555555555555555
+077117c11c71177071111111cccc66c7077777111c117000bb2444bb33bbbbbbbbb3333333bbbbbbbbb33333bb4442bb77777777777777777777777777777777
+77117711117711777117711cccc66c770711711111117000bb2444bb333bbbbbbb333333333bbbbbbb333333bb4442bbbb333333333bbbbbbb333333333bbbbb
+711777111177711771777777111777700771111777117000b32444bb3333bbbbb3333bbb3333bbbbb3333bbbbb4442bbb3333bbb3333bbbbb3333bbb3333bbbb
+777707711770777771700771117700000077117707117000332444bbb3333bbb3333bbbbb3333bbb3333bbbbbb4442bb3333bbbbb3333bbb3333bbbbb3333bbb
+000007711770000077707711177000000007711707717000332444bbbb333333333bbbbbbb333333333bbbbbbb444233333bbbbbbb333333333bbbbbbb333333
+000777111177700000007117770000000000771700777000332444bbbbb3333333bbbbbbbbb3333333bbbbbbbb44423333bbbbbbbbb3333333bbbbbbbbb33333
+0007111111117000000071770000000000000777000000003b2444bbbbbb33333bbbbbbbbbbb33333bbbbbbbbb4442333bbbbbbbbbbb33333bbbbbbbbbbb3333
 000777777777700000007770000000000000000000000000bb2444bb3bbbbbbbbbbb33333bbbbbbbbbbb3333bb4442bbbbbb33333bbbbbbbbbbb33333bbbbbbb
 000000777700000000007770000000000000000000000000bb2444bb33bbbbbbbbb3333333bbbbbbbbb33333bb4442bb00000000000000000000000000000000
-000007733770000000007b77000000000000000000777700bb2444bb333bbbbbbb333333333bbbbbbb333333bb4442bb00000000000000000000000000000000
-000007366370000000007bb7770000000000000007733770b32444bb3333bbbbb3333bbb3333bbbbb3333bbbbb4442bb00000000000000000000000000000000
-0000076666700000777077bbb77000000077777777663370332444bbb3333bbb3333bbbbb3333bbb3333bbbbbb4442bb00000000000000000000000000000000
-00007763367700007b70077bbb770000007bbbbbb3366370332444bbbb333333333bbbbbbb333333333bbbbbbb44423300000000000000000000000000000000
-00077b3333b770007b777777bbb777700077bbbb333367703324444bbbb3333333bbbbbbbbb3333333bbbbbbb444423300000000000000000000000000000000
-0077bb3333bb77007bb77bb333366377000777b3b33377003bb24444bbbb33333bbbbbbbbbbb33333bbbbbbb4444233300000000000000000000000000000000
-007bbb3333bbb7007bbbbbbb33336637000007bbbb3b7000bbbb24444bbbbbbbbbbb33333bbbbbbbbbbbbbb44442bbbb00000000000000000000000000000000
-077bb73bb37bb7707bbbbbbb33336637077777bbb3bb7000bbb3324444bbbbbbbbbbbbbbbbbbbbbbbbbbbb44442bbbbb00000000000000000000000000000000
-77bb77bbbb77bb777bb77bb33336637707bb7bbbbbbb7000bb333324444bbbbbbbbbbbbbbbbbbbbbbbbbb444423bbbbb00000000000000000000000000000000
-7bb777bbbb777bb77b777777bbb77770077bbbb777bb7000b3333bb2444444444444444444444444444444442333bbbb00000000000000000000000000000000
-7777077bb77077777b70077bbb7700000077bb7707bb70003333bbbb24444444444444444444444444444442b3333bbb00000000000000000000000000000000
-0000077bb7700000777077bbb770000000077bb7077b7000333bbbbbb244444444444444444444444444442bbb33333300000000000000000000000000000000
-000777bbbb77700000007bb777000000000077b70077700033bbbbbbbb2222222222222222222222222222bbbbb3333300000000000000000000000000000000
-0007bbbbbbbb700000007b770000000000000777000000003bbbbbbbbbbb33333bbbbbbbbbbb33333bbbbbbbbbbb333300000000000000000000000000000000
+0000077aa770000000007977000000000000000000777700bb2444bb333bbbbbbb333333333bbbbbbb333333bb4442bb00000000000000000000000000000000
+000007a66a700000000079977700000000000000077aa770b32444bb3333bbbbb3333bbb3333bbbbb3333bbbbb4442bb00000000000000000000000000000000
+00000766667000007770779997700000007777777766aa70332444bbb3333bbb3333bbbbb3333bbb3333bbbbbb4442bb00000000000000000000000000000000
+0000776aa67700007970077999770000007999999aa66a70332444bbbb333333333bbbbbbb333333333bbbbbbb44423300000000000000000000000000000000
+000779aaaa977000797777779997777000779999aaaa67703324444bbbb3333333bbbbbbbbb3333333bbbbbbb444423300000000000000000000000000000000
+007799aaaa9977007997799aaaa66a770007779a9aaa77003bb24444bbbb33333bbbbbbbbbbb33333bbbbbbb4444233300000000000000000000000000000000
+007999aaaa99970079999999aaaa66a70000079999a97000bbbb24444bbbbbbbbbbb33333bbbbbbbbbbbbbb44442bbbb00000000000000000000000000000000
+077997a99a79977079999999aaaa66a7077777999a997000bbb3324444bbbbbbbbbbbbbbbbbbbbbbbbbbbb44442bbbbb00000000000000000000000000000000
+77997799997799777997799aaaa66a770799799999997000bb333324444bbbbbbbbbbbbbbbbbbbbbbbbbb444423bbbbb00000000000000000000000000000000
+799777999977799779777777999777700779999777997000b3333bb2444444444444444444444444444444442333bbbb00000000000000000000000000000000
+7777077997707777797007799977000000779977079970003333bbbb24444444444444444444444444444442b3333bbb00000000000000000000000000000000
+000007799770000077707799977000000007799707797000333bbbbbb244444444444444444444444444442bbb33333300000000000000000000000000000000
+00077799997770000000799777000000000077970077700033bbbbbbbb2222222222222222222222222222bbbbb3333300000000000000000000000000000000
+0007999999997000000079770000000000000777000000003bbbbbbbbbbb33333bbbbbbbbbbb33333bbbbbbbbbbb333300000000000000000000000000000000
 000777777777700000007770000000000000000000000000bbbb33333bbbbbbbbbbb33333bbbbbbbbbbb33333bbbbbbb00000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
