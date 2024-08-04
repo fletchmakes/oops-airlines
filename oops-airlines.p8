@@ -279,7 +279,7 @@ function game_draw()
 	-- draw the background
 	if mode == "PLAN" then
 		-- set ground to grayscale
-		pal({[0]=0,129,128,128,134,133,134,134,136,9,10,133,12,141,14,15},1)
+		pal({[0]=0,129,128,128,134,133,134,134,136,132,137,133,140,141,14,15},1)
 	else
 		-- reset to default
 		pal()
@@ -293,6 +293,11 @@ function game_draw()
 	draw_play_area_border()
 
 	-- plane drawing
+	for pl in all(active_planes) do
+		local p = planes[pl]
+		p.shadows_draw(p)
+	end
+
 	for pl in all(active_planes) do
 		local p = planes[pl]
 		p.nodes_draw(p)
@@ -579,6 +584,11 @@ function add_plane(idx)
 			circfill(n.x+8, n.y+8, 2, self.color)
 			cursor = n
 		end
+	end
+
+	plane.shadows_draw = function(self)
+		local s = max(self.altitude,20)/80
+		circfill(self.x+8*s, self.y+16*s, 3.5-(80-self.altitude)/13, 1)
 	end
 
 	add(planes, plane)
