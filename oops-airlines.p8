@@ -34,6 +34,8 @@ local _btn, _btnp = btn, btnp
 local current_update = nil
 local current_draw = nil
 
+local particles = {}
+
 local planes = {}
 local active_planes = {}
 local plan_plane = nil -- plane that is currently being route planned for
@@ -86,7 +88,7 @@ local cam = {x=0, y=0, speed=3}
 local flag_num = 1
 local frame = 0
 
-local mode = "FLIGHT" -- "PLAN"
+local mode = "FLIGHT" -- "PLAN", "GAMEOVER"
 local focused_plane = nil
 local hangar = {x=192, y=136}
 local plane_spawner = 90 -- 10 seconds
@@ -99,8 +101,19 @@ function game_update()
 		flag_num = flag_num % 6 + 1
 	end
 
+	-- end-of-game updates
+	if mode == "GAMEOVER" then
+		-- TODO: play explosion effects
+		
+		-- camera
+		if focus_scene and costatus(focus_scene) ~= 'dead' then
+			coresume(focus_scene)
+		else
+			focus_scene = nil
+		end
+
 	-- flight mode - just watch the planes fly - zoom out to pan, zoom back in to switch between planes
-	if mode == "FLIGHT" then
+	elseif mode == "FLIGHT" then
 		plane_spawner -= 1
 		if plane_spawner <= 0 then 
 			plane_spawner = 100 + flr(rnd()*100)
@@ -143,6 +156,8 @@ function game_update()
 
 
 			if btnp(k_left) and #active_planes > 0 then
+				if focused_plane == nil then focused_plane = planes[active_planes[1]] return end
+
 				local cursor = 1
 				while cursor ~= #active_planes do
 					if planes[active_planes[cursor]].idx == focused_plane.idx then break end
@@ -156,6 +171,8 @@ function game_update()
 			end
 
 			if btnp(k_right) and #active_planes > 0 then
+				if focused_plane == nil then focused_plane = planes[active_planes[#active_planes]] return end
+
 				local cursor = 1
 				while cursor ~= #active_planes do
 					if planes[active_planes[cursor]].idx == focused_plane.idx then break end
@@ -232,6 +249,77 @@ function game_update()
     zoom = lerp(zoom, zoom_target, 0.2)
 end
 
+function game_draw()
+    -- set video mode to 128x128
+    poke(0x5f2c, 0)
+    -- set the screen to 0x80
+    poke(0x5f55, 0x80)
+
+    -- do your game draw operations here as normal
+    cls()
+
+	-- adjust the camera
+	camera(cam.x, cam.y)
+
+	-- draw the background
+	if mode == "PLAN" then
+		-- set ground to grayscale
+		pal({[0]=0,129,128,128,134,133,134,134,136,9,10,133,12,141,14,15},1)
+	else
+		-- reset to default
+		pal()
+	end
+	map(0, 0, 0, 0, 32, 32)
+
+	-- animate our flag
+	spr(flag_num, 194, 116)
+	spr(flag_num, 194, 140)
+
+	draw_play_area_border()
+
+	-- plane drawing
+	for p in all(planes) do
+		if p.status ~= "POOLED" then
+			p.nodes_draw(p)
+			p.draw(p)
+		end
+	end
+
+    resolve_particles()
+    -- end game draw operations
+
+    -- set video mode to 64x64
+    poke(0x5f2c, 3)
+
+    -- set spritesheet to 0x80
+    poke(0x5f54, 0x80)
+    -- set screen to 0x60
+    poke(0x5f55, 0x60)
+    cls()
+    
+    -- draw screen to screen
+    -- (originx,originy) is the coordinate center of the zoom. 
+    -- (-32,-32) will put the center of the 128x128 canvas on the center of the 64x64 screen.
+    local sx = -32 * (zoom - 0.5) * 2
+    local sy = -32 * (zoom - 0.5) * 2
+    local sw = 128 * zoom
+    local sh = 128 * zoom
+    -- treat the screen as a spritesheet when drawing to the screen (thanks video remapping)
+	clip(0,0,64,64)
+	camera()
+    sspr(0, 0, 128, 128, sx, sy, sw, sh)
+
+    -- video remap back to defaults (screen is the screen, spritesheet is the spritesheet)
+    poke(0x5f54, 0x00)
+
+	-- game ui
+	draw_airport_arrow()
+	draw_crosshair()
+
+	-- mode
+	if mode ~= "GAMEOVER" then draw_ui_overlay() end
+end
+
 -- adds a plane to the game
 local max_speed = 0.5
 local hangar = {x=186, y=128}
@@ -252,7 +340,6 @@ function add_plane(idx)
 
 	-- crude implementation of quadtrees - 256x256 area broken into cels of 32x32
 	plane.zone = -999
-	plane.collided = false
 
 	plane.add_node = function(self, x, y)
 		_qpush(self.nodes, {x=x, y=y})
@@ -321,8 +408,10 @@ function add_plane(idx)
 
 						if dist(self, p) < 16 then
 							-- TODO: start the explosion animation, pause gameplay, show end screen
-							self.collided = true
-							p.collided = true
+							-- TODO: only show collision effects on the point between planes
+							mode = "GAMEOVER"
+							-- TODO: focus on point between planes
+							focus_scene = cocreate(pan_to_position(self.x, self.y))
 						end
 					end
 				end
@@ -420,75 +509,6 @@ function add_plane(idx)
 	end
 
 	add(planes, plane)
-end
-
-function game_draw()
-    -- set video mode to 128x128
-    poke(0x5f2c, 0)
-    -- set the screen to 0x80
-    poke(0x5f55, 0x80)
-
-    -- do your game draw operations here as normal
-    cls()
-
-	-- adjust the camera
-	camera(cam.x, cam.y)
-
-	-- draw the background
-	if mode == "PLAN" then
-		-- set ground to grayscale
-		pal({[0]=0,129,128,128,134,133,134,134,136,9,10,133,12,141,14,15},1)
-	else
-		-- reset to default
-		pal()
-	end
-	map(0, 0, 0, 0, 32, 32)
-
-	-- animate our flag
-	spr(flag_num, 194, 116)
-	spr(flag_num, 194, 140)
-
-	draw_play_area_border()
-
-	-- plane drawing
-	for p in all(planes) do
-		if p.status ~= "POOLED" then
-			p.nodes_draw(p)
-			p.draw(p)
-		end
-	end
-    -- end game draw operations
-
-    -- set video mode to 64x64
-    poke(0x5f2c, 3)
-
-    -- set spritesheet to 0x80
-    poke(0x5f54, 0x80)
-    -- set screen to 0x60
-    poke(0x5f55, 0x60)
-    cls()
-    
-    -- draw screen to screen
-    -- (originx,originy) is the coordinate center of the zoom. 
-    -- (-32,-32) will put the center of the 128x128 canvas on the center of the 64x64 screen.
-    local sx = -32 * (zoom - 0.5) * 2
-    local sy = -32 * (zoom - 0.5) * 2
-    local sw = 128 * zoom
-    local sh = 128 * zoom
-    -- treat the screen as a spritesheet when drawing to the screen (thanks video remapping)
-	clip(0,0,64,64)
-	camera()
-    sspr(0, 0, 128, 128, sx, sy, sw, sh)
-
-    -- video remap back to defaults (screen is the screen, spritesheet is the spritesheet)
-    poke(0x5f54, 0x00)
-
-	-- game ui
-	draw_airport_arrow()
-	draw_crosshair()
-
-	-- mode
-	draw_ui_overlay()
 end
 
 function draw_play_area_border()
@@ -613,6 +633,23 @@ function pan_to_position(x, y)
 
 		user_input_blocker = false
 	end
+end
+
+-- particle system
+function resolve_particles()
+    if #particles < 1 then return end
+
+    for i=#particles,1,-1 do
+        local p = particles[i]
+        p.ttl -= 1
+        p.x += p.dx
+        p.y += p.dy
+        p.r = p.dr(p)
+
+        circfill(p.x, p.y, p.r, p.c(p))
+
+        if p.ttl <= 0 then deli(particles, i) end
+    end
 end
 
 -- https://www.lua.org/pil/11.4.html
