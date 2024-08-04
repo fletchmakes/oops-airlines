@@ -364,24 +364,7 @@ function add_plane(idx)
 				add(active_planes, self.idx)
 
 				-- move the camera to the plane
-				focus_scene = cocreate(function() 
-					user_input_blocker = true
-					local diffx, diffy = 999, 999
-					while diffx > 0.25 and diffy > 0.25 do
-						local lastcamx, lastcamy = cam.x, cam.y
-						local newcamx = lerp(cam.x, plan_plane.x-56, 0.1)
-						local newcamy = lerp(cam.y, plan_plane.y-56, 0.1)
-
-						if newcamx > 0 and newcamx < 128 then cam.x = newcamx end
-						if newcamy > 0 and newcamy < 128 then cam.y = newcamy end
-
-						diffx, diffy = abs(lastcamx - cam.x), abs(lastcamy - cam.y)
-
-						yield()
-					end
-
-					user_input_blocker = false
-				end)
+				focus_scene = cocreate(pan_to_position(self.x, self.y))
 			end
 		end
 	end
@@ -608,6 +591,28 @@ end
 -- assumes a and b are tables with members x and y
 function angle(a, b)
 	return atan2(a.x-b.x, a.y-b.y)
+end
+
+-- returns a function to be used with cocreate()
+function pan_to_position(x, y)
+	return function()
+		user_input_blocker = true
+		local diffx, diffy = 999, 999
+		while diffx > 0.25 and diffy > 0.25 do
+			local lastcamx, lastcamy = cam.x, cam.y
+			local newcamx = lerp(cam.x, x-56, 0.1)
+			local newcamy = lerp(cam.y, y-56, 0.1)
+
+			if newcamx > 0 and newcamx < 128 then cam.x = newcamx end
+			if newcamy > 0 and newcamy < 128 then cam.y = newcamy end
+
+			diffx, diffy = abs(lastcamx - cam.x), abs(lastcamy - cam.y)
+
+			yield()
+		end
+
+		user_input_blocker = false
+	end
 end
 
 -- https://www.lua.org/pil/11.4.html
