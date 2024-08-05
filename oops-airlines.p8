@@ -18,7 +18,7 @@ __lua__
 --   - Z - place node / pickup node
 --   - (hold) X - zoom out
 
-local debug = false
+local debug = true
 
 -- key constants
 local k_left = 0
@@ -31,15 +31,40 @@ local k_secondary = 5
 -- override button events with our own
 local _btn, _btnp = btn, btnp
 
+-- easier time switching between game states
 local current_update = nil
 local current_draw = nil
 
+-- particle simulator list
 local particles = {}
 
+-- plane related tracking
 local planes = {}
 local active_planes = {}
 local plan_plane = nil -- plane that is currently being route planned for
+
+-- goes with btnp and btn
 local user_input_blocker = false
+
+-- make displaying text sprites easier
+local beeg_letters = {
+	o = function(x, y) sspr(0, 109, 14, 19, x, y) end,
+	p = function(x, y) sspr(14, 109, 14, 19, x, y) end,
+	s = function(x, y) sspr(28, 109, 14, 19, x, y) end,
+}
+
+local smol_letters = {
+	a = function(x, y) sspr(40, 117, 5, 6, x, y) end,
+	i = function(x, y) sspr(44, 117, 5, 6, x, y) end,
+	r = function(x, y) sspr(48, 117, 5, 6, x, y) end,
+	l = function(x, y) sspr(52, 117, 5, 6, x, y) end,
+	y = function(x, y) sspr(56, 117, 5, 6, x, y) end,
+	n = function(x, y) sspr(40, 122, 5, 6, x, y) end,
+	e = function(x, y) sspr(44, 122, 5, 6, x, y) end,
+	s = function(x, y) sspr(48, 122, 5, 6, x, y) end,
+	f = function(x, y) sspr(52, 122, 5, 6, x, y) end,
+	p = function(x, y) sspr(56, 122, 5, 6, x, y) end,
+}
 
 function _init()
     poke(0x5f2c, 3)
@@ -279,7 +304,7 @@ function game_draw()
 	-- draw the background
 	if mode == "PLAN" then
 		-- set ground to grayscale
-		pal({[0]=0,129,128,128,134,133,134,134,136,132,137,133,140,141,14,15},1)
+		pal({[0]=0,129,128,128,134,133,134,134,136,132,4,133,140,141,14,15},1)
 	else
 		-- reset to default
 		pal()
@@ -311,8 +336,7 @@ function game_draw()
     resolve_particles()
 
 	if mode == "PLAN" then
-		-- TODO: fix
-		circ(hangar.x, hangar.y, sin(t()/16)*6, 7)
+		spr(9, hangar.x-4, hangar.y-8+sin(t())*2.5, 1, 1, false, true)
 	end
     -- end game draw operations
 
@@ -455,7 +479,7 @@ function add_plane(idx)
 					   p.zone == self.zone + 7 then
 
 						local d = dist({x=self.x+8,y=self.y+8}, {x=p.x+8,y=p.y+8})
-						if d < 16 then
+						if d < 10 then
 							local xsign, ysign = 0, 0
 							local theta = angle({x=self.x+8,y=self.y+8}, {x=p.x+8,y=p.y+8})
 							local midx, midy = p.x+8+cos(theta)*(d/2),p.y+8+sin(theta)*(d/2)
