@@ -309,6 +309,11 @@ function game_draw()
 	end
 
     resolve_particles()
+
+	if mode == "PLAN" then
+		-- TODO: fix
+		circ(hangar.x, hangar.y, sin(t()/16)*6, 7)
+	end
     -- end game draw operations
 
     -- set video mode to 64x64
