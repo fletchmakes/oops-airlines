@@ -45,6 +45,11 @@ local plan_plane = nil -- plane that is currently being route planned for
 local last_plan_node = nil
 local last_plan_node_hovered = false
 
+-- score tracking
+local points = 0
+local flights_saved = { 0, 0, 0 } -- red, blue, yellow
+local flight_type = { RED=1, BLUE=2, YELLOW=3 }
+
 -- goes with btnp and btn
 local user_input_blocker = false
 
@@ -66,6 +71,7 @@ local smol_letters = {
 	s = function(x, y) sspr(48, 122, 5, 6, x, y) end,
 	f = function(x, y) sspr(52, 122, 5, 6, x, y) end,
 	p = function(x, y) sspr(56, 122, 5, 6, x, y) end,
+	emphasis = function(x, y) sspr(60, 122, 3, 6, x, y) end,
 }
 
 function _init()
@@ -113,7 +119,7 @@ local cam = {x=0, y=0, speed=3}
 
 -- flag animation
 local flag_num = 1
-local frame = 0
+local frame = 1
 
 local mode = "FLIGHT" -- "PLAN", "GAMEOVER"
 local focused_plane = nil
@@ -124,11 +130,20 @@ local game_over_stuff = {
 	explosion = nil
 }
 
+local animation_stuff = {
+	current = nil
+}
+
 function game_update()
     -- write any game update logic here
-	frame += 1
+	frame = frame % 30 + 1
 	if frame % 5 == 0 then
 		flag_num = flag_num % 6 + 1
+	end
+
+	-- animation is playing, don't update the game yet
+	if animation_stuff.current and costatus(animation_stuff.current) ~= 'dead' then
+		return
 	end
 
 	-- end-of-game updates
@@ -184,13 +199,13 @@ function game_update()
 			local newcamx = lerp(cam.x, cam_target.x-56, 0.2)
 			local newcamy = lerp(cam.y, cam_target.y-56, 0.2)
 
-			if abs(newcamx - cam.x) < 0.5 then
+			if abs(newcamx - cam.x) < 0.76 then
 				if cam_target.x > 0 and cam_target.x < 128 then cam.x = cam_target.x - 56 end
 			else
 				if newcamx > 0 and newcamx < 128 then cam.x = newcamx end
 			end
 
-			if abs(newcamy - cam.y) < 0.5 then 
+			if abs(newcamy - cam.y) < 0.76 then 
 				if cam_target.y > 0 and cam_target.y < 128 then cam.y = cam_target.y - 56 end
 			else
 				if newcamy > 0 and newcamy < 128 then cam.y = newcamy end
@@ -390,8 +405,24 @@ function game_draw()
 	draw_airport_arrow()
 	draw_crosshair()
 
+	-- animations
+	if animation_stuff.current and costatus(animation_stuff.current) ~= 'dead' then
+		coresume(animation_stuff.current)
+	else
+		animation_stuff.current = nil
+	end
+
 	-- mode
-	if mode ~= "GAMEOVER" then draw_ui_overlay() end
+	if mode ~= "GAMEOVER" then 
+		draw_ui_overlay() 
+	else
+		-- TODO: animate end game screen
+		-- show end game screen
+		-- print(points, 0, 6, 7)
+		-- print(flights_saved[flight_type.RED], 0, 12, 7)
+		-- print(flights_saved[flight_type.BLUE], 0, 18, 7)
+		-- print(flights_saved[flight_type.YELLOW], 0, 24, 7)
+	end
 end
 
 -- adds a plane to the game
@@ -437,6 +468,7 @@ function add_plane(idx)
 			mode = "FLIGHT"
 			plan_plane = nil
 			last_plan_node = nil
+			animation_stuff.current = cocreate(fly_text())
 		end
 	end
 
@@ -482,7 +514,7 @@ function add_plane(idx)
 
 	plane.update = function(self)
 		-- check if we're landing
-		if self.status == "ROUTING" and dist(self, airport) < 5 then
+		if self.status == "ROUTING" and dist(self, airport) < 6 then
 			self.status = "LANDING"
 			return
 		end
@@ -548,6 +580,10 @@ function add_plane(idx)
 				else
 					focused_plane = planes[active_planes[1]]
 				end
+
+				-- TODO: re-evaluate how best to distribute points - maybe more points for slower planes is better since they are trickier?
+				points += self.type * 10 -- 10 points for red, 20 for blue, and 30 for yellow
+				flights_saved[self.type] += 1
 			end
 		elseif plane.status == "IDLE" then
 			-- fly in a given direction
@@ -561,6 +597,8 @@ function add_plane(idx)
 				self.status = "ROUTING"
 				plan_plane = self
 				add(active_planes, self.idx)
+
+				animation_stuff.current = cocreate(plan_text())
 
 				-- move the camera to the plane
 				focus_scene = cocreate(pan_to_position(self.x, self.y))
@@ -783,6 +821,67 @@ function pan_to_position(x, y)
 	end
 end
 
+-- returns a function to be used with cocreate()
+function fly_text()
+	return function()
+		user_input_blocker = true
+
+		local frames = 0
+		local gravity = 0.5
+		local y = {64, 64, 64, 64}
+		local dy = {-5, -5, -5, -5}
+		while dy[4] < 0 or y[4] < 64 do -- wait for the last letter
+			frames += 1
+
+			-- simulate gravity
+			if frames > 0 then y[1] += dy[1] dy[1] += gravity end
+			if frames > 5 then y[2] += dy[2] dy[2] += gravity end
+			if frames > 10 then y[3] += dy[3] dy[3] += gravity end
+			if frames > 15 then y[4] += dy[4] dy[4] += gravity end
+
+			smol_letters.f(23, y[1])
+			smol_letters.l(27, y[2])
+			smol_letters.y(31, y[3])
+			smol_letters.emphasis(35, y[4])
+
+			yield()
+		end
+
+		user_input_blocker = false
+	end
+end
+
+function plan_text()
+	return function()
+		user_input_blocker = true
+
+		local frames = 0
+		local gravity = 0.5
+		local y = {64, 64, 64, 64, 64}
+		local dy = {-5, -5, -5, -5, -5}
+		while dy[5] < 0 or y[5] < 64 do -- wait for the last letter
+			frames += 1
+
+			-- simulate gravity
+			if frames > 0 then y[1] += dy[1] dy[1] += gravity end
+			if frames > 5 then y[2] += dy[2] dy[2] += gravity end
+			if frames > 10 then y[3] += dy[3] dy[3] += gravity end
+			if frames > 15 then y[4] += dy[4] dy[4] += gravity end
+			if frames > 20 then y[5] += dy[5] dy[5] += gravity end
+
+			smol_letters.p(21, y[1])
+			smol_letters.l(25, y[2])
+			smol_letters.a(29, y[3])
+			smol_letters.n(33, y[4])
+			smol_letters.emphasis(37, y[5])
+
+			yield()
+		end
+
+		user_input_blocker = false
+	end
+end
+
 -- particle system
 function resolve_particles()
     if #particles < 1 then return end
@@ -975,12 +1074,12 @@ __gfx__
 7ccccc007ccccc7cccccccccccc00077cccccccc7171771771717177711170000000000000000000000000000000000000000000000000000000000000000000
 7ccccc007ccccc7ccccccccccc0000077777cccc7111771771177177777170000000000000000000000000000000000000000000000000000000000000000000
 7ccccc007ccccc7cccccccccc00000ccc007cccc7171711171717111711170000000000000000000000000000000000000000000000000000000000000000000
-7ccccccccccccc7ccccc777700000ccccccccccc7777777777777777777770000000000000000000000000000000000000000000000000000000000000000000
-7ccccccccccccc7ccccc000000007ccccccccccc7117711171117111711170000000000000000000000000000000000000000000000000000000000000000000
-77ccccccccccc07ccccc000000007cccccccccc07171717771777177717170000000000000000000000000000000000000000000000000000000000000000000
-077ccccccccc007ccccc0000000077cccccccc007171711777717117711170000000000000000000000000000000000000000000000000000000000000000000
-0077ccccccc00077ccc000000000077cccccc0007171711171117177717770000000000000000000000000000000000000000000000000000000000000000000
-00077777770000077700000000000077777700007777777777777777777770000000000000000000000000000000000000000000000000000000000000000000
+7ccccccccccccc7ccccc777700000ccccccccccc7777777777777777777777700000000000000000000000000000000000000000000000000000000000000000
+7ccccccccccccc7ccccc000000007ccccccccccc7117711171117111711171700000000000000000000000000000000000000000000000000000000000000000
+77ccccccccccc07ccccc000000007cccccccccc07171717771777177717171700000000000000000000000000000000000000000000000000000000000000000
+077ccccccccc007ccccc0000000077cccccccc007171711777717117711177700000000000000000000000000000000000000000000000000000000000000000
+0077ccccccc00077ccc000000000077cccccc0007171711171117177717771700000000000000000000000000000000000000000000000000000000000000000
+00077777770000077700000000000077777700007777777777777777777777700000000000000000000000000000000000000000000000000000000000000000
 __map__
 3839383938393839383938393839383938393839383938393637383938393839000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 4849484948494849484948494849484948494849484948494647484948493839000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
