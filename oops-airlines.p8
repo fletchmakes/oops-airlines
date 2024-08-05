@@ -18,6 +18,7 @@ __lua__
 --   - Z - place node / pickup node
 --   - (hold) X - zoom out
 
+-- TODO: fix camera jitters
 local debug = false
 
 -- key constants
@@ -122,16 +123,17 @@ local flag_num = 1
 local frame = 1
 
 local mode = "FLIGHT" -- "PLAN", "GAMEOVER"
-local focused_plane = nil
 local hangar = {x=192, y=136}
-local plane_spawner = 90 -- 10 seconds
+local focused_plane = nil
+local plane_spawner = 30 -- 10 seconds
 local focus_scene = nil
 local game_over_stuff = {
 	explosion = nil
 }
 
 local animation_stuff = {
-	current = nil
+	current = nil,
+	is_animating = false
 }
 
 function game_update()
@@ -143,7 +145,9 @@ function game_update()
 
 	-- animation is playing, don't update the game yet
 	if animation_stuff.current and costatus(animation_stuff.current) ~= 'dead' then
-		return
+		animation_stuff.is_animating = true
+	else
+		animation_stuff.is_animating = false
 	end
 
 	-- end-of-game updates
@@ -169,6 +173,10 @@ function game_update()
 			focus_scene = nil
 		end
 
+		if btnp(4) then
+			reset_game()
+		end
+
 	-- flight mode - just watch the planes fly - zoom out to pan, zoom back in to switch between planes
 	elseif mode == "FLIGHT" then
 		plane_spawner -= 1
@@ -185,10 +193,6 @@ function game_update()
 			end
 		end
 
-		for p in all(planes) do
-			if p.status ~= "POOLED" then p.update(p) end
-		end
-
 		-- we're zoomed in, so we just switch between tracking planes
 		if zoom_target == 1 then
 			local cam_target = hangar
@@ -199,13 +203,13 @@ function game_update()
 			local newcamx = lerp(cam.x, cam_target.x-56, 0.2)
 			local newcamy = lerp(cam.y, cam_target.y-56, 0.2)
 
-			if abs(newcamx - cam.x) < 0.76 then
+			if abs(newcamx - cam.x) < 0.5 then
 				if cam_target.x > 0 and cam_target.x < 128 then cam.x = cam_target.x - 56 end
 			else
 				if newcamx > 0 and newcamx < 128 then cam.x = newcamx end
 			end
 
-			if abs(newcamy - cam.y) < 0.76 then 
+			if abs(newcamy - cam.y) < 0.5 then 
 				if cam_target.y > 0 and cam_target.y < 128 then cam.y = cam_target.y - 56 end
 			else
 				if newcamy > 0 and newcamy < 128 then cam.y = newcamy end
@@ -267,6 +271,13 @@ function game_update()
 			zoom_target = 1
 		end
 
+		-- update the planes
+		if not animation_stuff.is_animating then
+			for p in all(planes) do
+				if p.status ~= "POOLED" then p.update(p) end
+			end
+		end
+
 	-- plan mode - no planes move, just set nodes on the current plane
 	elseif mode == "PLAN" then
 		if focus_scene and costatus(focus_scene) ~= 'dead' then
@@ -275,6 +286,8 @@ function game_update()
 		else
 			focus_scene = nil
 		end
+
+		if animation_stuff.is_animating then return end
 
 		if btn(k_left) and cam.x > 0 then
 			cam.x -= cam.speed
@@ -342,8 +355,6 @@ function game_draw()
 	-- animate our flag
 	spr(flag_num, 194, 116)
 	spr(flag_num, 194, 140)
-
-	draw_play_area_border()
 
 	-- plane drawing
 	for pl in all(active_planes) do
@@ -577,7 +588,7 @@ function add_plane(idx)
 
 				if #active_planes == 0 then
 					focused_plane = nil
-				else
+				elseif focused_plane.idx == self.idx then
 					focused_plane = planes[active_planes[1]]
 				end
 
@@ -697,10 +708,6 @@ function add_plane(idx)
 	add(planes, plane)
 end
 
-function draw_play_area_border()
-
-end
-
 function draw_airport_arrow()
 	local cx,cy = cam.x + 64, cam.y + 64 -- center of the screen
 	local ax,ay = hangar.x, hangar.y -- center of airport runway
@@ -741,6 +748,42 @@ function draw_ui_overlay()
 		spr(12, 0, 56)
 		print(chr(139)..chr(145)..chr(148)..chr(131)..chr(142)..chr(151), 17, 57, 7)
 	end
+end
+
+function reset_game()
+	particles = {}
+
+	for i=1,10 do
+		planes[i].x = -100
+		planes[i].y = -100
+		planes[i].status = "POOLED"
+		planes[i].nodes = _qnew()
+		planes[i].next_node = nil
+		planes[i].theta = nil
+		planes[i].altitude = 80
+		planes[i].smoke = {}
+	end
+
+	active_planes = {}
+	plan_plane = nil
+	last_plan_node = nil
+	last_plan_node_hovered = false
+
+	points = 0
+	flights_saved = {0, 0, 0}
+
+	user_input_blocker = false
+
+	zoom = 1
+	zoom_target = 1
+
+	frame = 1
+	mode = "FLIGHT"
+	plane_spawner = 30
+	focused_plane = nil
+	focus_scene = nil
+	game_over_stuff.explosion = nil
+	animation_stuff.current = nil
 end
 
 -->8
