@@ -31,6 +31,7 @@ local k_secondary = 5
 
 -- override button events with our own
 local _btn, _btnp = btn, btnp
+local user_input_blocker = false
 
 -- easier time switching between game states
 local current_update = nil
@@ -51,8 +52,26 @@ local points = 0
 local flights_saved = { 0, 0, 0 } -- red, blue, yellow
 local flight_type = { RED=1, BLUE=2, YELLOW=3 }
 
--- goes with btnp and btn
-local user_input_blocker = false
+-- camera
+local cam = new_camera()
+
+-- animations
+local animation = {
+	frame = 1,
+	
+	-- used with pan_to_position
+	focus_scene = nil,
+
+	-- TODO: move to update_me
+	-- various little animations like fly_text
+	current = nil,
+	is_animating = false,
+
+	-- TODO: move flag animations to update_me
+	-- list of all animations that updates or draws
+	update_me = {},
+	draw_me = {},
+}
 
 -- make displaying text sprites easier
 local beeg_letters = {
@@ -113,27 +132,19 @@ end
 -->8
 -- gameplay
 
--- camera
-local zoom = 1
-local zoom_target = 1
-local cam = {x=0, y=0, speed=3}
-
--- flag animation
-local flag_num = 1
-local frame = 1
-
 local mode = "FLIGHT" -- "PLAN", "GAMEOVER"
+-- TODO: fix renaming
+local plane_spawn_timer = 10
+
+-- TODO: make a camera object and make this a tracked object
 local hangar = {x=192, y=136}
+
+-- TODO: move to new camera object
 local focused_plane = nil
-local plane_spawner = 30 -- 10 seconds
-local focus_scene = nil
+
+-- TODO: move to animations
 local game_over_stuff = {
 	explosion = nil
-}
-
-local animation_stuff = {
-	current = nil,
-	is_animating = false
 }
 
 function game_update()
@@ -194,7 +205,7 @@ function game_update()
 		end
 
 		-- we're zoomed in, so we just switch between tracking planes
-		if zoom_target == 1 then
+		if cam.zoom_target == 1 then
 			local cam_target = hangar
 			if focused_plane ~= nil then
 				cam_target = focused_plane
@@ -266,9 +277,9 @@ function game_update()
 		end
 
 		if btn(k_secondary) then
-			zoom_target = 0.5
+			cam.zoom_target = 0.5
 		else
-			zoom_target = 1
+			cam.zoom_target = 1
 		end
 
 		-- update the planes
@@ -321,13 +332,13 @@ function game_update()
 		end
 
 		if btn(k_secondary) then
-			zoom_target = 0.5
+			cam.zoom_target = 0.5
 		else
-			zoom_target = 1
+			cam.zoom_target = 1
 		end
 	end
     -- end game update logic
-    zoom = lerp(zoom, zoom_target, 0.2)
+    cam.zoom = lerp(cam.zoom, cam.zoom_target, 0.2)
 end
 
 function game_draw()
@@ -400,10 +411,10 @@ function game_draw()
     -- draw screen to screen
     -- (originx,originy) is the coordinate center of the zoom. 
     -- (-32,-32) will put the center of the 128x128 canvas on the center of the 64x64 screen.
-    local sx = -32 * (zoom - 0.5) * 2
-    local sy = -32 * (zoom - 0.5) * 2
-    local sw = 128 * zoom
-    local sh = 128 * zoom
+    local sx = -32 * (cam.zoom - 0.5) * 2
+    local sy = -32 * (cam.zoom - 0.5) * 2
+    local sw = 128 * cam.zoom
+    local sh = 128 * cam.zoom
     -- treat the screen as a spritesheet when drawing to the screen (thanks video remapping)
 	clip(0,0,64,64)
 	camera()
@@ -530,7 +541,7 @@ function add_plane(idx)
 			return
 		end
 
-		if plane.status == "ROUTING" then
+		if self.status == "ROUTING" then
 			-- check if we reached our next node
 			if dist(self, self.next_node) < self.speed then
 				_qdequeue(self.nodes) -- remove the current entry
@@ -570,7 +581,7 @@ function add_plane(idx)
 				end
 			end
 
-		elseif plane.status == "LANDING" then
+		elseif self.status == "LANDING" then
 			self.zone = -999
 
 			self.altitude -= 1
@@ -596,7 +607,7 @@ function add_plane(idx)
 				points += self.type * 10 -- 10 points for red, 20 for blue, and 30 for yellow
 				flights_saved[self.type] += 1
 			end
-		elseif plane.status == "IDLE" then
+		elseif self.status == "IDLE" then
 			-- fly in a given direction
 			-- if we make it into the play area, request game focus, switch to planning mode, and prompt for a route
 			self.x -= cos(self.theta) * self.speed
@@ -617,7 +628,7 @@ function add_plane(idx)
 		end
 	end
 
-	plane.draw = function(self)
+	self.draw = function(self)
 		-- don't draw pooled objects
 		if self.status == "POOLED" then return end
 
@@ -716,7 +727,7 @@ function draw_airport_arrow()
 	local distance = sqrt((ax-cx)*(ax-cx)+(ay-cy)*(ay-cy))
 
 	-- if the hangar is on the screen, just don't show
-	if distance / (1/zoom) <= 32 then return end
+	if distance / (1/cam.zoom) <= 32 then return end
 
 	local sy = sin(theta) * 20 + 28
 	local sx = cos(theta) * 20 + 32
@@ -739,7 +750,7 @@ function draw_ui_overlay()
 
 	if mode == "FLIGHT" then
 		spr(11, 0, 56)
-		if zoom_target == 1 then
+		if cam.zoom_target == 1 then
 			print(chr(139)..chr(145)..chr(151), 41, 57, 7)
 		else -- 0.5
 			print(chr(139)..chr(145)..chr(148)..chr(131)..chr(151), 25, 57, 7)
@@ -751,6 +762,7 @@ function draw_ui_overlay()
 end
 
 function reset_game()
+	--TODO: all of this mess will need to be fixed too
 	particles = {}
 
 	for i=1,10 do
@@ -774,8 +786,8 @@ function reset_game()
 
 	user_input_blocker = false
 
-	zoom = 1
-	zoom_target = 1
+	cam.zoom = 1
+	cam.zoom_target = 1
 
 	frame = 1
 	mode = "FLIGHT"
@@ -813,33 +825,24 @@ function splashscreen_draw()
 end
 
 -->8
--- helper functions
+-- camera functions
 
--- basic lerp <3
-function lerp(from, to, amount)
-    local dist = to - from
-    if abs(dist) <= 0.01 then return to end
-    return from + (dist * amount)
-end
+function new_camera()
+	local c = {}
 
--- vector maths
--- assumes a and b are tables with members x and y
--- https://www.lexaloffle.com/bbs/?tid=36059
-function dist(a, b)
-	local dx = a.x-b.x
-	local dy = a.y-b.y
-	local maskx,masky=dx>>31,dy>>31
-	local a0,b0=(dx+maskx)^^maskx,(dy+masky)^^masky
-	if a0>b0 then
-		return a0*0.9609+b0*0.3984
+	c.x = 0
+	c.y = 0
+	c.speed = 3
+
+	c.tracking = nil
+	c.zoom = 1
+	c.zoom_target = 1
+
+	c.update = function(self)
+		-- TODO: handle tracking
 	end
-	return b0*0.9609+a0*0.3984
-end
 
-
--- assumes a and b are tables with members x and y
-function angle(a, b)
-	return atan2(a.x-b.x, a.y-b.y)
+	return c
 end
 
 -- returns a function to be used with cocreate()
@@ -863,6 +866,18 @@ function pan_to_position(x, y)
 		user_input_blocker = false
 	end
 end
+
+-->8
+-- animation functions
+
+-- basic lerp <3
+function lerp(from, to, amount)
+    local dist = to - from
+    if abs(dist) <= 0.01 then return to end
+    return from + (dist * amount)
+end
+
+-- TODO: make a flag object and add it to animation.update_me and animation.draw_me
 
 -- returns a function to be used with cocreate()
 function fly_text()
@@ -923,6 +938,29 @@ function plan_text()
 
 		user_input_blocker = false
 	end
+end
+
+-->8
+-- helper functions
+
+-- vector maths
+-- assumes a and b are tables with members x and y
+-- https://www.lexaloffle.com/bbs/?tid=36059
+function dist(a, b)
+	local dx = a.x-b.x
+	local dy = a.y-b.y
+	local maskx,masky=dx>>31,dy>>31
+	local a0,b0=(dx+maskx)^^maskx,(dy+masky)^^masky
+	if a0>b0 then
+		return a0*0.9609+b0*0.3984
+	end
+	return b0*0.9609+a0*0.3984
+end
+
+
+-- assumes a and b are tables with members x and y
+function angle(a, b)
+	return atan2(a.x-b.x, a.y-b.y)
 end
 
 -- particle system
