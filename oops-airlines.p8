@@ -71,6 +71,9 @@ local smol_letters = {
 	emphasis = function(x, y) sspr(60, 122, 3, 6, x, y) end,
 }
 
+local alphabet = split("a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r,s,t,u,v,w,x,y,z")
+local numerals = split("0,1,2,3,4,5,6,7,8,9")
+
 function _init()
 	-- 64x64
     poke(0x5f2c, 3)
@@ -121,7 +124,7 @@ end
 
 local mode = "FLIGHT" -- "PLAN", "GAMEOVER"
 local plane_spawn_timer = 10
-local hangar = {x=192, y=136}
+local hangar = {x=192, y=126}
 
 function game_update()
     -- write any game update logic here
@@ -142,8 +145,6 @@ function game_update()
 		if btnp(4) then
 			reset_game()
 		end
-
-		return
 
 	-- flight mode - just watch the planes fly - zoom out to pan, zoom back in to switch between planes
 	elseif mode == "FLIGHT" then
@@ -294,7 +295,6 @@ function game_draw()
 		draw_ui_overlay() 
 	else
 		-- TODO: animate end game screen
-		-- TODO: camera not focusing on explosion
 		-- show end game screen
 		-- print(points, 0, 6, 7)
 		-- print(flights_saved[flight_type.RED], 0, 12, 7)
@@ -309,6 +309,7 @@ function switch_to_plan(plane_to_track)
 	add(active_planes, plan_plane.idx)
 	animation.current = cocreate(plan_text())
 	cam.focus_item(cam, plan_plane)
+	cam.track_target = plan_plane
 end
 
 function switch_to_flight()
@@ -342,6 +343,7 @@ function add_plane(idx)
 	plane.sprite = sprites[1]
 	plane.color = colors[1]
 	plane.speed = 0.25
+	plane.code = ""
 
 	-- nodes are represented as a queue
 	plane.nodes = _qnew()
@@ -405,6 +407,8 @@ function add_plane(idx)
 		self.sprite = sprites[type]
 		self.color = colors[type]
 		self.speed = 0.25*type
+
+		self.code = rnd(alphabet)..rnd(alphabet)..rnd(numerals)..rnd(numerals)..rnd(numerals)..rnd(numerals)
 
 		self.altitude = 80
 		self.smoke = {}
@@ -609,7 +613,24 @@ function draw_crosshair()
 end
 
 function draw_ui_overlay()
-	rectfill(0, 56, 63, 63, 0)
+	-- top hud
+	rectfill(0, 0, 63, 5, 0)
+
+	if mode == "FLIGHT" then
+		if cam.track_target ~= nil and cam.track_target.color ~= nil then
+			rectfill(1, 1, 3, 3, cam.track_target.color)
+			print(cam.track_target.code, 5, 0, 7)
+		end
+	else
+		rectfill(1, 1, 3, 3, plan_plane.color)
+		print(plan_plane.code, 5, 0, 7)
+	end
+
+	local points_str = tostr(points)..chr(146)
+	print(points_str, 61-#points_str*4, 0, 7)
+
+	-- bottom hud
+	rectfill(0, 57, 63, 63, 0)
 
 	if mode == "FLIGHT" then
 		spr(11, 0, 56)
@@ -731,9 +752,9 @@ function new_camera()
 			local newcamy = lerp(self.y, tty, 0.2)
 
 			-- snap to tracked target if we're close enough
-			if dist(self, {x=newcamx, y=newcamy}) < 0.5 then 
-				self.x = ttx
-				self.y = tty
+			if dist(self, {x=newcamx, y=newcamy}) < 0.5 then
+				if ttx > 0 and ttx < 128 then self.x = ttx end
+				if tty > 0 and tty < 128 then self.y = tty end
 			else
 				if newcamx > 0 and newcamx < 128 then self.x = newcamx end
 				if newcamy > 0 and newcamy < 128 then self.y = newcamy end
@@ -1013,9 +1034,9 @@ function _qdequeue(queue)
 end
 
 __gfx__
-00000000777770007777770077777770777077707770000077770000000000700000000000088000000000000000700000000700000000000000000000000000
-00000000688877006888877068878870687778706877777068877000000077000000080000888800007007000000700000007770000000000000000000000000
-00700700688887706888787068887770688787706887787068887770000707000000088008888880077007707007700000077777000000000000000000000000
+00000000777770007777770077777770777077707770000077770000000000700000000000088000000000000000000000000000000000000000000000000000
+00000000688877006888877068878870687778706877777068877000000077000000080000888800007007000000700000007000000000000000000000000000
+00700700688887706888787068887770688787706887787068887770000707000000088008888880077007707007700000077700000000000000000000000000
 00077000688778706887777068887000688877006888877068888870700777770000088800000000000000007777777000777770000000000000000000000000
 00077000677777706777000067777000678870006788770067777770777777000000088800000000000000007777777707777700000000000000000000000000
 00700700600000006000000060000000677770006777700060000000077770000000088000000000077007707007700070777000000000000000000000000000
