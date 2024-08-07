@@ -412,7 +412,6 @@ function add_plane(idx)
 	plane.update = function(self)
 		-- check if we're landing
 		if self.status == "ROUTING" and dist(self, airport) < 6 then
-			-- TODO: sometimes game crashes?
 			self.status = "LANDING"
 		end
 
@@ -470,7 +469,7 @@ function add_plane(idx)
 				self.theta = nil
 				del(active_planes, self.idx)
 
-				cam.set_new_target(cam)
+				cam.set_new_target(cam, self.idx)
 
 				-- TODO: re-evaluate how best to distribute points - maybe more points for slower planes is better since they are trickier?
 				points += self.type * 10 -- 10 points for red, 20 for blue, and 30 for yellow
@@ -725,7 +724,6 @@ function new_camera()
 		if self.is_tracking then
 			if self.track_target == nil then self.track_target = hangar end
 
-			-- TODO: fix camera snap when switching targets
 			-- lerp to the tracked target
 			local ttx, tty = self.track_target.x-56, self.track_target.y-56
 
@@ -733,7 +731,7 @@ function new_camera()
 			local newcamy = lerp(self.y, tty, 0.2)
 
 			-- snap to tracked target if we're close enough
-			if abs(newcamx - self.x) <= 0.75 and abs(newcamy - self.y) <= 0.75 then
+			if abs(newcamx - self.x) <= 0.475 and abs(newcamy - self.y) <= 0.475 then
 				if ttx > 0 and ttx < 128 and tty > 0 and tty < 128 then 
 					self.x = ttx 
 					self.y = tty
@@ -812,10 +810,10 @@ function new_camera()
 		self.is_tracking = false
 	end
 
-	c.set_new_target = function(self)
+	c.set_new_target = function(self, idx)
 		if #active_planes == 0 then
 			self.track_target = hangar
-		elseif self.track_target.idx == self.idx then
+		elseif self.track_target.idx == idx then
 			self.track_target = planes[active_planes[1]]
 		end
 	end
