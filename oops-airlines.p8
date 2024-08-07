@@ -294,6 +294,7 @@ function game_draw()
 		draw_ui_overlay() 
 	else
 		-- TODO: animate end game screen
+		-- TODO: camera not focusing on explosion
 		-- show end game screen
 		-- print(points, 0, 6, 7)
 		-- print(flights_saved[flight_type.RED], 0, 12, 7)
@@ -726,16 +727,13 @@ function new_camera()
 
 			-- lerp to the tracked target
 			local ttx, tty = self.track_target.x-56, self.track_target.y-56
-
 			local newcamx = lerp(self.x, ttx, 0.2)
 			local newcamy = lerp(self.y, tty, 0.2)
 
 			-- snap to tracked target if we're close enough
-			if abs(newcamx - self.x) <= 0.475 and abs(newcamy - self.y) <= 0.475 then
-				if ttx > 0 and ttx < 128 and tty > 0 and tty < 128 then 
-					self.x = ttx 
-					self.y = tty
-				end
+			if dist(self, {x=newcamx, y=newcamy}) < 0.5 then 
+				self.x = ttx
+				self.y = tty
 			else
 				if newcamx > 0 and newcamx < 128 then self.x = newcamx end
 				if newcamy > 0 and newcamy < 128 then self.y = newcamy end
