@@ -18,7 +18,6 @@ __lua__
 --   - Z - place node / pickup node
 --   - (hold) X - zoom out
 
--- TODO: fix camera jitters
 local debug = false
 
 -- key constants
@@ -28,10 +27,6 @@ local k_up = 2
 local k_down = 3
 local k_primary = 4
 local k_secondary = 5
-
--- override button events with our own
-local _btn, _btnp = btn, btnp
-local user_input_blocker = false
 
 -- easier time switching between game states
 local current_update = nil
@@ -53,21 +48,17 @@ local flights_saved = { 0, 0, 0 } -- red, blue, yellow
 local flight_type = { RED=1, BLUE=2, YELLOW=3 }
 
 -- camera
-local cam = new_camera()
+local cam = nil
 
 -- animations
 local animation = {
 	frame = 1,
 	
-	-- used with pan_to_position
-	focus_scene = nil,
-
 	-- TODO: move to update_me
 	-- various little animations like fly_text
 	current = nil,
 	is_animating = false,
 
-	-- TODO: move flag animations to update_me
 	-- list of all animations that updates or draws
 	update_me = {},
 	draw_me = {},
@@ -95,7 +86,17 @@ local smol_letters = {
 }
 
 function _init()
+	-- 64x64
     poke(0x5f2c, 3)
+	
+	-- camera initialization
+	cam = new_camera()
+
+	flags = new_flags()
+	add(animation.update_me, flags)
+	add(animation.draw_me, flags)
+
+	-- start with the splashscreen
 	current_update = splashscreen_update
 	current_draw = splashscreen_draw
 
@@ -133,14 +134,8 @@ end
 -- gameplay
 
 local mode = "FLIGHT" -- "PLAN", "GAMEOVER"
--- TODO: fix renaming
 local plane_spawn_timer = 10
-
--- TODO: make a camera object and make this a tracked object
 local hangar = {x=192, y=136}
-
--- TODO: move to new camera object
-local focused_plane = nil
 
 -- TODO: move to animations
 local game_over_stuff = {
@@ -149,16 +144,16 @@ local game_over_stuff = {
 
 function game_update()
     -- write any game update logic here
-	frame = frame % 30 + 1
-	if frame % 5 == 0 then
-		flag_num = flag_num % 6 + 1
+	animation.frame = animation.frame % 30 + 1
+	for a in all(animation.update_me) do
+		a.update(a)
 	end
 
 	-- animation is playing, don't update the game yet
-	if animation_stuff.current and costatus(animation_stuff.current) ~= 'dead' then
-		animation_stuff.is_animating = true
+	if animation.current and costatus(animation.current) ~= 'dead' then
+		animation.is_animating = true
 	else
-		animation_stuff.is_animating = false
+		animation.is_animating = false
 	end
 
 	-- end-of-game updates
@@ -176,13 +171,6 @@ function game_update()
 				ttl=30
 			},1)
 		end
-		
-		-- camera
-		if focus_scene and costatus(focus_scene) ~= 'dead' then
-			coresume(focus_scene)
-		else
-			focus_scene = nil
-		end
 
 		if btnp(4) then
 			reset_game()
@@ -190,9 +178,9 @@ function game_update()
 
 	-- flight mode - just watch the planes fly - zoom out to pan, zoom back in to switch between planes
 	elseif mode == "FLIGHT" then
-		plane_spawner -= 1
-		if plane_spawner <= 0 then 
-			plane_spawner = 100 + flr(rnd()*100)
+		plane_spawn_timer -= 1
+		if plane_spawn_timer <= 0 then 
+			plane_spawn_timer = 100 + flr(rnd()*100)
 	
 			-- find a plane to spawn (one that is pooled)
 			for i=1,#planes do
@@ -204,86 +192,8 @@ function game_update()
 			end
 		end
 
-		-- we're zoomed in, so we just switch between tracking planes
-		if cam.zoom_target == 1 then
-			local cam_target = hangar
-			if focused_plane ~= nil then
-				cam_target = focused_plane
-			end
-
-			local newcamx = lerp(cam.x, cam_target.x-56, 0.2)
-			local newcamy = lerp(cam.y, cam_target.y-56, 0.2)
-
-			if abs(newcamx - cam.x) < 0.5 then
-				if cam_target.x > 0 and cam_target.x < 128 then cam.x = cam_target.x - 56 end
-			else
-				if newcamx > 0 and newcamx < 128 then cam.x = newcamx end
-			end
-
-			if abs(newcamy - cam.y) < 0.5 then 
-				if cam_target.y > 0 and cam_target.y < 128 then cam.y = cam_target.y - 56 end
-			else
-				if newcamy > 0 and newcamy < 128 then cam.y = newcamy end
-			end
-
-
-			if btnp(k_left) and #active_planes > 0 then
-				if focused_plane == nil then focused_plane = planes[active_planes[1]] return end
-
-				local cursor = 1
-				while cursor ~= #active_planes do
-					if planes[active_planes[cursor]].idx == focused_plane.idx then break end
-					cursor += 1
-				end
-
-				cursor -= 1
-				if cursor == 0 then cursor = #active_planes end
-
-				focused_plane = planes[active_planes[cursor]]
-			end
-
-			if btnp(k_right) and #active_planes > 0 then
-				if focused_plane == nil then focused_plane = planes[active_planes[#active_planes]] return end
-
-				local cursor = 1
-				while cursor ~= #active_planes do
-					if planes[active_planes[cursor]].idx == focused_plane.idx then break end
-					cursor += 1
-				end
-
-				cursor += 1
-				if cursor > #active_planes then cursor = 1 end
-
-				focused_plane = planes[active_planes[cursor]]
-			end
-			
-		-- we're zoomed out, so allow the camera to pan	
-		else
-			if btn(k_left) and cam.x > 0 then
-				cam.x -= cam.speed
-			end
-	
-			if btn(k_right) and cam.x < 128 then
-				cam.x += cam.speed
-			end
-	
-			if btn(k_up) and cam.y > 0 then
-				cam.y -= cam.speed
-			end
-	
-			if btn(k_down) and cam.y < 128 then
-				cam.y += cam.speed
-			end
-		end
-
-		if btn(k_secondary) then
-			cam.zoom_target = 0.5
-		else
-			cam.zoom_target = 1
-		end
-
 		-- update the planes
-		if not animation_stuff.is_animating then
+		if not animation.is_animating then
 			for p in all(planes) do
 				if p.status ~= "POOLED" then p.update(p) end
 			end
@@ -291,32 +201,13 @@ function game_update()
 
 	-- plan mode - no planes move, just set nodes on the current plane
 	elseif mode == "PLAN" then
-		if focus_scene and costatus(focus_scene) ~= 'dead' then
-			coresume(focus_scene)
+		if animation.is_animating then
+			-- update the camera
+			cam.update(cam)
 			return
-		else
-			focus_scene = nil
 		end
 
-		if animation_stuff.is_animating then return end
-
-		if btn(k_left) and cam.x > 0 then
-			cam.x -= cam.speed
-		end
-
-		if btn(k_right) and cam.x < 128 then
-			cam.x += cam.speed
-		end
-
-		if btn(k_up) and cam.y > 0 then
-			cam.y -= cam.speed
-		end
-
-		if btn(k_down) and cam.y < 128 then
-			cam.y += cam.speed
-		end
-
-		if last_plan_node ~= nil and dist(last_plan_node, {x=cam.x+63, y=cam.y+63}) < 5 then 
+		if last_plan_node ~= nil and dist(last_plan_node, cam.get_reticle(cam)) < 5 then 
 			last_plan_node_hovered = true 
 		else
 			last_plan_node_hovered = false
@@ -326,19 +217,14 @@ function game_update()
 			if last_plan_node_hovered then
 				plan_plane.remove_last_node(plan_plane)
 			else
-				last_plan_node = {x=cam.x+63,y=cam.y+63}
-				plan_plane.add_node(plan_plane, cam.x+56, cam.y+56)
+				last_plan_node = cam.get_reticle(cam)
+				plan_plane.add_node(plan_plane, last_plan_node.x-7, last_plan_node.y-7)
 			end
 		end
-
-		if btn(k_secondary) then
-			cam.zoom_target = 0.5
-		else
-			cam.zoom_target = 1
-		end
 	end
-    -- end game update logic
-    cam.zoom = lerp(cam.zoom, cam.zoom_target, 0.2)
+
+	-- update the camera
+	cam.update(cam)
 end
 
 function game_draw()
@@ -363,9 +249,9 @@ function game_draw()
 	end
 	map(0, 0, 0, 0, 32, 32)
 
-	-- animate our flag
-	spr(flag_num, 194, 116)
-	spr(flag_num, 194, 140)
+	for a in all(animation.draw_me) do
+		a.draw(a)
+	end
 
 	-- plane drawing
 	for pl in all(active_planes) do
@@ -391,8 +277,8 @@ function game_draw()
 
 		-- last plan node delete UI
 		if last_plan_node ~= nil then
-			-- blinking cursor if the camera reticle is close enough
-			if last_plan_node_hovered then --sin(t()/3) < 0 and 
+			-- show "X" if the camera reticle is close enough
+			if last_plan_node_hovered then 
 				sspr(40, 114, 3, 3, last_plan_node.x, last_plan_node.y)
 			end
 		end
@@ -428,10 +314,10 @@ function game_draw()
 	draw_crosshair()
 
 	-- animations
-	if animation_stuff.current and costatus(animation_stuff.current) ~= 'dead' then
-		coresume(animation_stuff.current)
+	if animation.current and costatus(animation.current) ~= 'dead' then
+		coresume(animation.current)
 	else
-		animation_stuff.current = nil
+		animation.current = nil
 	end
 
 	-- mode
@@ -445,6 +331,28 @@ function game_draw()
 		-- print(flights_saved[flight_type.BLUE], 0, 18, 7)
 		-- print(flights_saved[flight_type.YELLOW], 0, 24, 7)
 	end
+end
+
+function switch_to_plan(plane_to_track)
+	mode = "PLAN"
+	plan_plane = plane_to_track
+	add(active_planes, plan_plane.idx)
+	animation.current = cocreate(plan_text())
+	cam.focus_item(cam, plan_plane)
+end
+
+function switch_to_flight()
+	mode = "FLIGHT"
+	plan_plane = nil
+	last_plan_node = nil
+	animation.current = cocreate(fly_text())
+end
+
+-- takes an x,y coordinate for where the collision happened
+function switch_to_gameover(x, y)
+	mode = "GAMEOVER"
+	game_over_stuff.explosion = {x=x, y=y}
+	cam.focus_item(cam, {x=x, y=y})
 end
 
 -- adds a plane to the game
@@ -487,10 +395,7 @@ function add_plane(idx)
 		-- check if we've clicked the airfield
 		local dist_to_hangar = dist({x=x, y=y}, airport)
 		if dist_to_hangar < 5 then
-			mode = "FLIGHT"
-			plan_plane = nil
-			last_plan_node = nil
-			animation_stuff.current = cocreate(fly_text())
+			switch_to_flight()
 		end
 	end
 
@@ -538,7 +443,6 @@ function add_plane(idx)
 		-- check if we're landing
 		if self.status == "ROUTING" and dist(self, airport) < 6 then
 			self.status = "LANDING"
-			return
 		end
 
 		if self.status == "ROUTING" then
@@ -573,9 +477,7 @@ function add_plane(idx)
 							local xsign, ysign = 0, 0
 							local theta = angle({x=self.x+8,y=self.y+8}, {x=p.x+8,y=p.y+8})
 							local midx, midy = p.x+8+cos(theta)*(d/2),p.y+8+sin(theta)*(d/2)
-							mode = "GAMEOVER"
-							game_over_stuff.explosion = {x=midx, y=midy}
-							focus_scene = cocreate(pan_to_position(midx, midy))
+							switch_to_gameover(midx, midy)
 						end
 					end
 				end
@@ -597,16 +499,13 @@ function add_plane(idx)
 				self.theta = nil
 				del(active_planes, self.idx)
 
-				if #active_planes == 0 then
-					focused_plane = nil
-				elseif focused_plane.idx == self.idx then
-					focused_plane = planes[active_planes[1]]
-				end
+				cam.set_new_target(cam)
 
 				-- TODO: re-evaluate how best to distribute points - maybe more points for slower planes is better since they are trickier?
 				points += self.type * 10 -- 10 points for red, 20 for blue, and 30 for yellow
 				flights_saved[self.type] += 1
 			end
+		
 		elseif self.status == "IDLE" then
 			-- fly in a given direction
 			-- if we make it into the play area, request game focus, switch to planning mode, and prompt for a route
@@ -615,20 +514,13 @@ function add_plane(idx)
 
 			if self.x > 32 and self.x < 192 and self.y > 32 and self.y < 192 then
 				-- activate PLAN mode for this plane
-				mode = "PLAN"
 				self.status = "ROUTING"
-				plan_plane = self
-				add(active_planes, self.idx)
-
-				animation_stuff.current = cocreate(plan_text())
-
-				-- move the camera to the plane
-				focus_scene = cocreate(pan_to_position(self.x, self.y))
+				switch_to_plan(self)
 			end
 		end
 	end
 
-	self.draw = function(self)
+	plane.draw = function(self)
 		-- don't draw pooled objects
 		if self.status == "POOLED" then return end
 
@@ -784,18 +676,13 @@ function reset_game()
 	points = 0
 	flights_saved = {0, 0, 0}
 
-	user_input_blocker = false
+	cam = new_camera()
 
-	cam.zoom = 1
-	cam.zoom_target = 1
-
-	frame = 1
+	animation.frame = 1
 	mode = "FLIGHT"
-	plane_spawner = 30
-	focused_plane = nil
-	focus_scene = nil
+	plane_spawn_timer = 10
 	game_over_stuff.explosion = nil
-	animation_stuff.current = nil
+	animation.current = nil
 end
 
 -->8
@@ -834,37 +721,136 @@ function new_camera()
 	c.y = 0
 	c.speed = 3
 
-	c.tracking = nil
+	c.is_tracking = false
+	c.track_target = nil
+	c.item_needs_focus = nil
+
 	c.zoom = 1
 	c.zoom_target = 1
 
 	c.update = function(self)
-		-- TODO: handle tracking
+		-- item needs immediate focus, so we ignore everything else
+		if self.item_needs_focus ~= nil then
+			local lastcamx, lastcamy = self.x, self.y
+			local offset = 64
+			if self.item_needs_focus.idx ~= nil then offset = 56 end
+			local newcamx = lerp(self.x, self.item_needs_focus.x-offset, 0.1)
+			local newcamy = lerp(self.y, self.item_needs_focus.y-offset, 0.1)
+
+			if newcamx > 0 and newcamx < 128 then self.x = newcamx end
+			if newcamy > 0 and newcamy < 128 then self.y = newcamy end
+
+			diffx, diffy = abs(lastcamx - self.x), abs(lastcamy - self.y)
+
+			if diffx < 0.25 and diffy < 0.25 then self.item_needs_focus = nil end
+			return
+		end
+
+		-- we are watching a plane fly at the moment
+		if self.is_tracking then
+			if self.track_target == nil then self.track_target = hangar end
+
+			-- TODO: fix camera snap between play area border and full tracking
+			-- lerp to the tracked target
+			local ttx, tty = self.track_target.x-56, self.track_target.y-56
+
+			local newcamx = lerp(self.x, ttx, 0.2)
+			local newcamy = lerp(self.y, tty, 0.2)
+
+			-- snap to tracked target if we're close enough
+			if abs(newcamx - self.x) < 0.75 or abs(newcamy - self.y) < 0.75 then
+				if ttx > 0 and ttx < 128 and tty > 0 and tty < 128 then 
+					self.x = ttx 
+					self.y = tty
+				end
+			else
+				if newcamx > 0 and newcamx < 128 then self.x = newcamx end
+				if newcamy > 0 and newcamy < 128 then self.y = newcamy end
+			end
+
+			-- rotate through the list of active planes for tracking
+			if btnp(k_left) and #active_planes > 0 then
+				if self.track_target == nil then self.track_target = planes[active_planes[1]] return end
+
+				local cursor = 1
+				while cursor ~= #active_planes do
+					if planes[active_planes[cursor]].idx == self.track_target.idx then break end
+					cursor += 1
+				end
+
+				cursor -= 1
+				if cursor == 0 then cursor = #active_planes end
+
+				self.track_target = planes[active_planes[cursor]]
+			end
+
+			if btnp(k_right) and #active_planes > 0 then
+				if self.track_target == nil then self.track_target = planes[active_planes[#active_planes]] return end
+
+				local cursor = 1
+				while cursor ~= #active_planes do
+					if planes[active_planes[cursor]].idx == self.track_target.idx then break end
+					cursor += 1
+				end
+
+				cursor += 1
+				if cursor > #active_planes then cursor = 1 end
+
+				self.track_target = planes[active_planes[cursor]]
+			end
+		end
+		
+		-- pan the camera with arrow keys
+		if not self.is_tracking then
+			if btn(k_left) and self.x > 0 then
+				self.x -= self.speed
+			end
+	
+			if btn(k_right) and self.x < 128 then
+				self.x += self.speed
+			end
+	
+			if btn(k_up) and self.y > 0 then
+				self.y -= self.speed
+			end
+	
+			if btn(k_down) and self.y < 128 then
+				self.y += self.speed
+			end
+		end
+
+		-- handle zooming
+		if btn(k_secondary) then
+			cam.zoom_target = 0.5
+			self.is_tracking = false
+		else
+			cam.zoom_target = 1
+			if mode == "FLIGHT" then self.is_tracking = true end
+		end
+
+		self.zoom = lerp(self.zoom, self.zoom_target, 0.2)
+	end
+
+	-- draw the camera to a location, and stop being drawn towards the tracked target
+	c.focus_item = function(self, item)
+		self.item_needs_focus = item
+		self.is_tracking = false
+	end
+
+	c.set_new_target = function(self)
+		if #active_planes == 0 then
+			self.track_target = hangar
+		elseif self.track_target.idx == self.idx then
+			self.track_target = planes[active_planes[1]]
+		end
+	end
+
+	-- gets the center of the screen
+	c.get_reticle = function(self)
+		return {x=self.x+63, y=self.y+63}
 	end
 
 	return c
-end
-
--- returns a function to be used with cocreate()
-function pan_to_position(x, y)
-	return function()
-		user_input_blocker = true
-		local diffx, diffy = 999, 999
-		while diffx > 0.25 or diffy > 0.25 do
-			local lastcamx, lastcamy = cam.x, cam.y
-			local newcamx = lerp(cam.x, x-64, 0.1)
-			local newcamy = lerp(cam.y, y-64, 0.1)
-
-			if newcamx > 0 and newcamx < 128 then cam.x = newcamx end
-			if newcamy > 0 and newcamy < 128 then cam.y = newcamy end
-
-			diffx, diffy = abs(lastcamx - cam.x), abs(lastcamy - cam.y)
-
-			yield()
-		end
-
-		user_input_blocker = false
-	end
 end
 
 -->8
@@ -877,13 +863,28 @@ function lerp(from, to, amount)
     return from + (dist * amount)
 end
 
--- TODO: make a flag object and add it to animation.update_me and animation.draw_me
+function new_flags()
+	local flags = {}
+
+	flags.num = 1
+
+	flags.update = function(self)
+		if animation.frame % 5 == 0 then
+			self.num = self.num % 6 + 1
+		end
+	end
+
+	flags.draw = function(self)
+		spr(self.num, 194, 116)
+		spr(self.num, 194, 140)
+	end
+
+	return flags
+end
 
 -- returns a function to be used with cocreate()
 function fly_text()
 	return function()
-		user_input_blocker = true
-
 		local frames = 0
 		local gravity = 0.5
 		local y = {64, 64, 64, 64}
@@ -904,15 +905,11 @@ function fly_text()
 
 			yield()
 		end
-
-		user_input_blocker = false
 	end
 end
 
 function plan_text()
 	return function()
-		user_input_blocker = true
-
 		local frames = 0
 		local gravity = 0.5
 		local y = {64, 64, 64, 64, 64}
@@ -935,8 +932,6 @@ function plan_text()
 
 			yield()
 		end
-
-		user_input_blocker = false
 	end
 end
 
@@ -1019,17 +1014,6 @@ function _qdequeue(queue)
 	queue[first] = nil
 	queue.first += 1
 	return value
-end
-
--- stop user input if we want
-function btn(num)
-	if user_input_blocker then return false end
-	return _btn(num)
-end
-
-function btnp(num)
-	if user_input_blocker then return false end
-	return _btnp(num)
 end
 
 __gfx__
