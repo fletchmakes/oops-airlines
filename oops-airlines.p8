@@ -137,11 +137,6 @@ local mode = "FLIGHT" -- "PLAN", "GAMEOVER"
 local plane_spawn_timer = 10
 local hangar = {x=192, y=136}
 
--- TODO: move to animations
-local game_over_stuff = {
-	explosion = nil
-}
-
 function game_update()
     -- write any game update logic here
 	animation.frame = animation.frame % 30 + 1
@@ -158,23 +153,11 @@ function game_update()
 
 	-- end-of-game updates
 	if mode == "GAMEOVER" then
-		-- play explosion effects
-		for i=1,2 do
-			add(particles, {
-				x=game_over_stuff.explosion.x,
-				y=game_over_stuff.explosion.y,
-				r=8,
-				dx=rnd(2)-1,
-				dy=rnd(2)-1,
-				dr=function(p) return p.r/1.075 end,
-				c=function(p) return min(flr(((8-p.r)/(8))*4)+7,10) end,
-				ttl=30
-			},1)
-		end
-
 		if btnp(4) then
 			reset_game()
 		end
+
+		return
 
 	-- flight mode - just watch the planes fly - zoom out to pan, zoom back in to switch between planes
 	elseif mode == "FLIGHT" then
@@ -351,7 +334,8 @@ end
 -- takes an x,y coordinate for where the collision happened
 function switch_to_gameover(x, y)
 	mode = "GAMEOVER"
-	game_over_stuff.explosion = {x=x, y=y}
+	local explosion = new_explosion(x, y)
+	add(animation.update_me, explosion)
 	cam.focus_item(cam, {x=x, y=y})
 end
 
@@ -679,9 +663,13 @@ function reset_game()
 	cam = new_camera()
 
 	animation.frame = 1
+	animation.update_me = {}
+	animation.draw_me = {}
+	add(animation.update_me, flags)
+	add(animation.draw_me, flags)
+
 	mode = "FLIGHT"
 	plane_spawn_timer = 10
-	game_over_stuff.explosion = nil
 	animation.current = nil
 end
 
@@ -851,6 +839,31 @@ function new_camera()
 	end
 
 	return c
+end
+
+function new_explosion(x, y)
+	local e = {}
+
+	e.x = x
+	e.y = y
+
+	e.update = function(self)
+		-- play explosion effects
+		for i=1,2 do
+			add(particles, {
+				x=self.x,
+				y=self.y,
+				r=8,
+				dx=rnd(2)-1,
+				dy=rnd(2)-1,
+				dr=function(p) return p.r/1.075 end,
+				c=function(p) return min(flr(((8-p.r)/(8))*4)+7,10) end,
+				ttl=30
+			},1)
+		end
+	end
+
+	return e
 end
 
 -->8
