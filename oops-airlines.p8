@@ -5,19 +5,6 @@ __lua__
 -- by fletch
 -- made for lowrezjam 2024
 
--- FLIGHT MODE CONTROLS
--- zoomed in:
---   - left / right - switch focus between planes
---   - X - zoom out
--- zoomed out:
---   - left / right / up / down - slowly pan the camera
---   - X - zoom in
-
--- PATH MODE CONTROLS
---   - left / right / up / down - slowly pan the camera
---   - Z - place node / pickup node
---   - (hold) X - zoom out
-
 local debug = false
 
 -- key constants
@@ -54,8 +41,7 @@ local cam = nil
 local animation = {
 	frame = 1,
 	
-	-- TODO: move to update_me
-	-- various little animations like fly_text
+	-- current is a coroutine, like fly_text()
 	current = nil,
 	is_animating = false,
 
@@ -426,6 +412,7 @@ function add_plane(idx)
 	plane.update = function(self)
 		-- check if we're landing
 		if self.status == "ROUTING" and dist(self, airport) < 6 then
+			-- TODO: sometimes game crashes?
 			self.status = "LANDING"
 		end
 
@@ -626,19 +613,19 @@ function draw_ui_overlay()
 
 	if mode == "FLIGHT" then
 		spr(11, 0, 56)
+
 		if cam.zoom_target == 1 then
-			print(chr(139)..chr(145)..chr(151), 41, 57, 7)
+			print(chr(139)..chr(145)..chr(151), 41, 58, 7)
 		else -- 0.5
-			print(chr(139)..chr(145)..chr(148)..chr(131)..chr(151), 25, 57, 7)
+			print(chr(139)..chr(145)..chr(148)..chr(131)..chr(151), 25, 58, 7)
 		end
 	else -- "PLAN"
 		spr(12, 0, 56)
-		print(chr(139)..chr(145)..chr(148)..chr(131)..chr(142)..chr(151), 17, 57, 7)
+		print(chr(139)..chr(145)..chr(148)..chr(131)..chr(142)..chr(151), 17, 58, 7)
 	end
 end
 
 function reset_game()
-	--TODO: all of this mess will need to be fixed too
 	particles = {}
 
 	for i=1,10 do
@@ -738,7 +725,7 @@ function new_camera()
 		if self.is_tracking then
 			if self.track_target == nil then self.track_target = hangar end
 
-			-- TODO: fix camera snap between play area border and full tracking
+			-- TODO: fix camera snap when switching targets
 			-- lerp to the tracked target
 			local ttx, tty = self.track_target.x-56, self.track_target.y-56
 
@@ -746,7 +733,7 @@ function new_camera()
 			local newcamy = lerp(self.y, tty, 0.2)
 
 			-- snap to tracked target if we're close enough
-			if abs(newcamx - self.x) < 0.75 or abs(newcamy - self.y) < 0.75 then
+			if abs(newcamx - self.x) <= 0.75 and abs(newcamy - self.y) <= 0.75 then
 				if ttx > 0 and ttx < 128 and tty > 0 and tty < 128 then 
 					self.x = ttx 
 					self.y = tty
