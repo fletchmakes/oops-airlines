@@ -25,6 +25,7 @@ local particles = {}
 -- plane related tracking
 local planes = {}
 local active_planes = {}
+local tutorial_planes = { 4, 3, 2 } -- 4 blue planes, 3 red planes, 2 yellow, the rest random
 local plan_plane = nil -- plane that is currently being route planned for
 local last_plan_node = nil
 local last_plan_node_hovered = false
@@ -156,7 +157,19 @@ function game_update()
 			for i=1,#planes do
 				local p = planes[i]
 				if p.status == "POOLED" then
-					p.activate(p)
+					local color = nil
+					if tutorial_planes[1] > 0 then
+						color = flight_type.BLUE
+						tutorial_planes[1] -= 1
+					elseif tutorial_planes[2] > 0 then
+						color = flight_type.RED
+						tutorial_planes[2] -= 1
+					elseif tutorial_planes[3] > 0 then
+						color = flight_type.YELLOW
+						tutorial_planes[3] -= 1
+					end
+
+					p.activate(p, color)
 					break
 				end
 			end
@@ -325,6 +338,7 @@ function switch_to_gameover(x, y)
 	local explosion = new_explosion(x, y)
 	add(animation.update_me, explosion)
 	cam.focus_item(cam, {x=x, y=y})
+	cam.zoom_target = 1
 end
 
 -- adds a plane to the game
@@ -384,8 +398,7 @@ function add_plane(idx)
 		end
 	end
 
-	plane.activate = function(self)
-		-- play area is (0, 0) (256, 256)
+	plane.activate = function(self, color)
 		self.status = "IDLE"
 
 		local pos = rnd() * 256
@@ -402,7 +415,7 @@ function add_plane(idx)
 
 		self.theta = angle(self, {x=128, y=128})
 
-		local type = rnd({1, 2, 3})
+		local type = color or rnd({1, 2, 3})
 		self.type = type
 		self.sprite = sprites[type]
 		self.color = colors[type]
@@ -661,6 +674,7 @@ function reset_game()
 	end
 
 	active_planes = {}
+	tutorial_planes = { 4, 3, 2 }
 	plan_plane = nil
 	last_plan_node = nil
 	last_plan_node_hovered = false
