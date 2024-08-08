@@ -614,20 +614,20 @@ end
 
 function draw_ui_overlay()
 	-- top hud
-	rectfill(0, 0, 63, 5, 0)
+	rectfill(0, 0, 63, 6, 0)
 
 	if mode == "FLIGHT" then
 		if cam.track_target ~= nil and cam.track_target.color ~= nil then
-			rectfill(1, 1, 3, 3, cam.track_target.color)
-			print(cam.track_target.code, 5, 0, 7)
+			rectfill(0, 2, 2, 4, cam.track_target.color)
+			print(cam.track_target.code, 5, 1, 7)
 		end
 	else
-		rectfill(1, 1, 3, 3, plan_plane.color)
-		print(plan_plane.code, 5, 0, 7)
+		rectfill(0, 2, 2, 4, plan_plane.color)
+		print(plan_plane.code, 5, 1, 7)
 	end
 
 	local points_str = tostr(points)..chr(146)
-	print(points_str, 61-#points_str*4, 0, 7)
+	print(points_str, 61-#points_str*4, 1, 7)
 
 	-- bottom hud
 	rectfill(0, 57, 63, 63, 0)
@@ -741,6 +741,9 @@ function new_camera()
 			if diffx < 0.25 and diffy < 0.25 then self.item_needs_focus = nil end
 			return
 		end
+
+		-- if its gameover, then don't allow the user to pan the camera
+		if mode == "GAMEOVER" then return end
 
 		-- we are watching a plane fly at the moment
 		if self.is_tracking then
