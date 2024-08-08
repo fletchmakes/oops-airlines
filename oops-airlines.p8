@@ -32,6 +32,7 @@ local last_plan_node_hovered = false
 
 -- score tracking
 local points = 0
+local point_lookup = { 30, 10, 20 }
 local flights_saved = { 0, 0, 0 } -- red, blue, yellow
 local flight_type = { RED=1, BLUE=2, YELLOW=3 }
 
@@ -489,8 +490,7 @@ function add_plane(idx)
 
 				cam.set_new_target(cam, self.idx)
 
-				-- TODO: re-evaluate how best to distribute points - maybe more points for slower planes is better since they are trickier?
-				points += self.type * 10 -- 10 points for red, 20 for blue, and 30 for yellow
+				points += point_lookup[self.type]
 				flights_saved[self.type] += 1
 			end
 		
