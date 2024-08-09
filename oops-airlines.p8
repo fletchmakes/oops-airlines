@@ -1085,6 +1085,7 @@ function wait(seconds)
 end
 
 function fade_to_black()
+	-- TODO: instead, use inverted circle draw method to circle in on explosion
 	return function()
 		local y = 63
 		while y ~= 0 do
