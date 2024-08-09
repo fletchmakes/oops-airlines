@@ -125,6 +125,9 @@ local plane_spawn_timer = 10
 local hangar = {x=192, y=126}
 
 function game_update()
+	
+	if btnp(4) then switch_to_gameover(64, 64) end
+
     -- write any game update logic here
 	animation.frame = animation.frame % 30 + 1
 	for a in all(animation.update_me) do
@@ -730,7 +733,7 @@ function gameover_draw()
 	cls()
 
 	-- title
-	sspr(0, 104, 64, 24, 0, 0)
+	sspr(0, 104, 64, 24, 0, 4)
 
 	-- score
 	local pstr = tostr(points)
@@ -920,7 +923,7 @@ function smooth_move(x, ax, dx, acc, damp, lim)
     dx += dif * acc -- accelerate
     ax += dx -- move
     dx *= damp -- dampen
--- limit, not always necessary, can replace with a default value
+	-- limit, not always necessary, can replace with a default value
     if abs(dif) < lim and abs(dx) < lim then 
         return x, 0
     end
@@ -1023,15 +1026,16 @@ end
 function animate_gameover_screen()
 	return function()
 		local titley, scorey = -25, 64
-		local difftitley, diffscorey = 999, 999
+		local titledy, scoredy = 0, 0
+		local frame = 0
 		rectfill(0, 0, 63, 63, 0)
-		while difftitley > 0.1 and diffscorey > 0.1 do
+		while frame < 90 do
 			yield()
 
 			local lasttitley, lastscorey = titley, scorey
 
-			titley = lerp(titley, 0, 0.2)
-			scorey = lerp(scorey, 36, 0.2)
+			titley, titledy = smooth_move(4, titley, titledy, 0.2, 0.7, 0.05)
+			scorey, scoredy = smooth_move(36, scorey, scoredy, 0.2, 0.7, 0.05)
 
 			-- background
 			rectfill(0, 0, 63, 63, 0)
@@ -1044,13 +1048,46 @@ function animate_gameover_screen()
 			print("score", 22, scorey, 7)
 			print(pstr, 32-(#pstr*4/2), scorey+6, 7)
 
-			difftitley, diffscorey = abs(titley-lasttitley), abs(scorey-lastscorey)
+			frame += 1
 		end
 
 		current_update = gameover_update
 		current_draw = gameover_draw
 	end
 end
+
+-- function animate_gameover_screen()
+-- 	return function()
+-- 		local titley, scorey = -25, 64
+-- 		local difftitley, diffscorey = 999, 999
+-- 		local titledy, scoredy = 0
+-- 		rectfill(0, 0, 63, 63, 0)
+-- 		while difftitley > 0.1 or diffscorey > 0.1 do
+-- 			yield()
+
+-- 			local lasttitley, lastscorey = titley, scorey
+
+-- 			titley, titledy = smooth_move(4, titley, titledy, 0.2, 0.7, 0.05)
+-- 			scorey, scoredy = smooth_move(36, scorey, scoredy, 0.2, 0.7, 0.05)
+
+-- 			-- background
+-- 			rectfill(0, 0, 63, 63, 0)
+
+-- 			-- title
+-- 			sspr(0, 104, 64, 24, 0, titley)
+
+-- 			-- score
+-- 			local pstr = tostr(points)
+-- 			print("score", 22, scorey, 7)
+-- 			print(pstr, 32-(#pstr*4/2), scorey+6, 7)
+
+-- 			difftitley, diffscorey = abs(titley-lasttitley), abs(scorey-lastscorey)
+-- 		end
+
+-- 		current_update = gameover_update
+-- 		current_draw = gameover_draw
+-- 	end
+-- end
 
 -->8
 -- helper functions
@@ -1068,7 +1105,6 @@ function dist(a, b)
 	end
 	return b0*0.9609+a0*0.3984
 end
-
 
 -- assumes a and b are tables with members x and y
 function angle(a, b)

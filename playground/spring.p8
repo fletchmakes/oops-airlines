@@ -24,21 +24,32 @@ function e_exp_approx(f)
     return 1 + f*(1 + f/2*(1 + f/3*(1 + f/4)))
 end
 
+function smooth_move(x, ax, dx, acc, damp, lim)
+    local dif = x - ax
+    dx += dif * acc -- accelerate
+    ax += dx -- move
+    dx *= damp -- dampen
+	-- limit, not always necessary, can replace with a default value
+    if abs(dif) < lim and abs(dx) < lim then 
+        return x, 0
+    end
+    return ax, dx
+end
+
 function _init()
-    x = 0
-    tim = 0
+    ax = -25
+    dx = 0
 end
 
 function _update()
-    tim = t()/4
-    x = easeInOutBack(tim) * 30
+    ax, dx = smooth_move(4, ax, dx, 0.2, 0.7, 0.05)
 end
 
 function _draw()
     cls()
-    print(tim, 0, 0, 7)
-    print(x, 0, 6, 7)
-    rectfill(x, 64, x+10, 74, 8)
+    camera(-20, 0)
+    print(ax, 0, 6, 7)
+    rectfill(ax, 64, ax+10, 74, 8)
     line(30, 0, 30, 63, 7)
 end
 
