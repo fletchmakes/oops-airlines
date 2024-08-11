@@ -253,7 +253,10 @@ function game_draw()
 
 	if mode == "PLAN" then
 		-- airport indicator
-		spr(9, hangar.x-4, hangar.y-8+sin(t())*2.5, 1, 1, false, true)
+		spr(9, hangar.x-4, hangar.y-4+sin(t())*2.5, 1, 1, false, true)
+
+		-- current plane indicator
+		spr(9, plan_plane.x+4, plan_plane.y-8+sin(t())*2.5, 1, 1, false, true)
 
 		-- last plan node delete UI
 		if last_plan_node ~= nil then
@@ -290,8 +293,12 @@ function game_draw()
     poke(0x5f54, 0x00)
 
 	-- game ui
-	draw_airport_arrow()
 	draw_crosshair()
+	draw_airport_arrow()
+
+	if mode == "PLAN" then
+		draw_plan_plane_arrow()
+	end
 
 	-- animations
 	if (not _qisempty(animation.queue)) and costatus(_qpeek(animation.queue)) ~= 'dead' then
@@ -656,9 +663,14 @@ function add_plane(idx)
 		if self.status ~= "ROUTING" then return end
 		if self.next_node == nil then return end
 
+		-- default to gray
+		local draw_col = 6
+		if mode == "PLAN" and plan_plane.idx == self.idx then draw_col = self.color end
+		if cam.track_target ~= nil and cam.track_target.idx == self.idx then draw_col = self.color end
+
 		-- draw current heading
-		line(self.x+8, self.y+8, self.next_node.x+8, self.next_node.y+8, self.color)
-		circfill(self.next_node.x+8, self.next_node.y+8, 2, self.color)
+		line(self.x+8, self.y+8, self.next_node.x+8, self.next_node.y+8, draw_col)
+		circfill(self.next_node.x+8, self.next_node.y+8, 2, draw_col)
 
 		print(#self.nodes, 0, 0, 7)
 
@@ -666,8 +678,8 @@ function add_plane(idx)
 		local cursor = self.next_node
 		for i=self.nodes.first+2,self.nodes.last do
 			local n = self.nodes[i]
-			line(cursor.x+8, cursor.y+8, n.x+8, n.y+8, self.color)
-			circfill(n.x+8, n.y+8, 2, self.color)
+			line(cursor.x+8, cursor.y+8, n.x+8, n.y+8, draw_col)
+			circfill(n.x+8, n.y+8, 2, draw_col)
 			cursor = n
 		end
 	end
@@ -691,13 +703,37 @@ function draw_airport_arrow()
 	if distance / (1/cam.zoom) <= 32 then return end
 
 	local sy = sin(theta) * 20 + 28
-	local sx = cos(theta) * 20 + 32
+	local sx = cos(theta) * 20 + 28
 
 	if theta > 0.875 or theta < 0.125 then
 		spr(8, sx, sy)
 	elseif theta <= 0.875 and theta >= 0.5 then
 		spr(9, sx, sy, 1, 1, false, true)
 	elseif theta >= 0.125 and theta <= 0.5 then
+		spr(9, sx, sy)
+	end
+end
+
+function draw_plan_plane_arrow()
+	local cx,cy = cam.x + 64, cam.y + 64 -- center of the screen
+	local ax,ay = plan_plane.x+8, plan_plane.y+8 -- center of plan_plane
+
+	local theta = atan2(ax-cx, ay-cy)
+	local distance = sqrt((ax-cx)*(ax-cx)+(ay-cy)*(ay-cy))
+
+	-- if the plane is on the screen, just don't show
+	if distance / (1/cam.zoom) <= 32 then return end
+
+	local sy = sin(theta) * 20 + 28
+	local sx = cos(theta) * 20 + 28
+
+	if theta > 0.875 or theta <= 0.125 then
+		spr(8, sx, sy)
+	elseif theta <= 0.875 and theta > 0.625 then
+		spr(9, sx, sy, 1, 1, false, true)
+	elseif theta <= 0.625 and theta > 0.375 then
+		spr(8, sx, sy, 1, 1, true)
+	elseif theta <= 0.375 and theta > 0.125 then
 		spr(9, sx, sy)
 	end
 end
@@ -892,8 +928,8 @@ function gameover_draw()
 	print(yellowfl, 224-(#yellowfl*4/2)+offset, 42, 7)
 
 	-- try again
-	print(chr(142), 0, 58, 7)
-	spr(13, 7, 56)
+	print(chr(142), 25, 58, 7)
+	spr(13, 33, 56)
 
 	-- pagination buttons
 	if page > 0 then print(chr(139), 0, 40+sin(t()/4)*3) end -- left
