@@ -110,26 +110,16 @@ function _draw()
 end
 
 -->8
--- menus
-
-function menu_update()
-
-end
-
-function menu_draw()
-
-end
-
--->8
 -- gameplay
 
-local mode = "FLIGHT" -- "PLAN", "GAMEOVER"
+local mode = "TUTORIAL" -- "PLAN", "GAMEOVER", "TUTORIAL"
 local plane_spawn_timer = 10
 local hangar = {x=192, y=126}
 
-function game_update()
-	if btnp(4) then switch_to_gameover(64, 64) end
+local tutorial_page = 0
+local tutorial_offset = 0
 
+function game_update()
     -- write any game update logic here
 	animation.frame = animation.frame % 30 + 1
 	for a in all(animation.update_me) do
@@ -148,8 +138,11 @@ function game_update()
 		end
 	end
 
-	-- end-of-game updates
-	if mode == "GAMEOVER" then
+	if mode == "TUTORIAL" then
+		if btnp(0) and tutorial_page > 0 then tutorial_page -= 1 end
+		if btnp(1) and tutorial_page < 4 then tutorial_page += 1 end
+		if btnp(4) then mode = "FLIGHT" end
+		tutorial_offset = lerp(tutorial_offset, -tutorial_page*64, 0.3)
 
 	-- flight mode - just watch the planes fly - zoom out to pan, zoom back in to switch between planes
 	elseif mode == "FLIGHT" then
@@ -306,8 +299,57 @@ function game_draw()
 	end
 
 	-- mode
-	if mode ~= "GAMEOVER" then 
+	if mode ~= "GAMEOVER" and mode~= "TUTORIAL" then 
 		draw_ui_overlay() 
+	end
+
+	if mode == "TUTORIAL" then
+		-- page controls
+		if tutorial_page > 0 then end -- TODO: print left arrow symbol
+		if tutorial_page < 5 then end -- TODO: print right arrow symbol
+		-- TODO: print confirm action symbol
+
+		-- page 1 (0)
+		rounded_rect(4+tutorial_offset, 4, 59+tutorial_offset, 59, 10, 0)
+		print("welcome to", 12+tutorial_offset, 8, 7)
+		print("oops airlines", 6+tutorial_offset, 14, 7)
+		print("help us!", 16+tutorial_offset, 24, 7)
+		print("guide our", 14+tutorial_offset, 34, 7)
+		print("planes back", 10+tutorial_offset, 40, 7)
+		print("to the hangar", 6+tutorial_offset, 46, 7)
+
+		-- page 2 (64)
+		rounded_rect(68+tutorial_offset, 4, 123+tutorial_offset, 59, 10, 0)
+		print("draw a path", 74+tutorial_offset, 14, 7)
+		print("for each", 80+tutorial_offset, 20, 7)
+		print("plane to fly", 72+tutorial_offset, 26, 7)
+		print("use "..chr(139)..chr(145)..chr(148)..chr(131), 72+tutorial_offset, 36, 7)
+		print("to get around", 70+tutorial_offset, 42, 7)
+
+		-- page 3 (128)
+		rounded_rect(132+tutorial_offset, 4, 187+tutorial_offset, 59, 10, 0)
+		print("drop a node", 138+tutorial_offset, 12, 7)
+		print("with "..chr(142), 144+tutorial_offset, 18, 7)
+		print("finish a path", 134+tutorial_offset, 28, 7)
+		print("by dropping", 138+tutorial_offset, 34, 7)
+		print("a node on", 142+tutorial_offset, 40, 7)
+		print("the runway!", 138+tutorial_offset, 46, 7)
+
+		-- page 4 (192)
+		rounded_rect(196+tutorial_offset, 4, 251+tutorial_offset, 59, 10, 0)
+		print("red planes", 204+tutorial_offset, 20, 7)
+		print("fly slowest", 202+tutorial_offset, 26, 7)
+		print("next is blue", 200+tutorial_offset, 32, 7)
+		print("then yellow", 202+tutorial_offset, 38, 7)
+
+		-- page 5 (256)
+		rounded_rect(260+tutorial_offset, 4, 315+tutorial_offset, 59, 10, 0)
+		print("score points", 264+tutorial_offset, 12, 7)
+		print("each time a", 266+tutorial_offset, 18, 7)
+		print("plane lands", 266+tutorial_offset, 24, 7)
+		print("the game ends", 262+tutorial_offset, 34, 7)
+		print("when planes", 266+tutorial_offset, 40, 7)
+		print("collide!", 272+tutorial_offset, 46, 7)
 	end
 end
 
@@ -886,7 +928,7 @@ function new_camera()
 		end
 
 		-- if its gameover, then don't allow the user to pan the camera
-		if mode == "GAMEOVER" then return end
+		if mode == "GAMEOVER" or mode == "TUTORIAL" then return end
 
 		-- we are watching a plane fly at the moment
 		if self.is_tracking then
