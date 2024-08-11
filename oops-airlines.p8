@@ -450,8 +450,8 @@ function add_plane(idx)
 	plane.activate = function(self, color)
 		self.status = "IDLE"
 
-		local pos = rnd() * 256
-		local opos = rnd({0, 256})
+		local pos = flr(rnd() * 160)+32
+		local opos = rnd({0, 192})
 		local x_or_y = rnd()
 
 		if x_or_y < 0.5 then
@@ -468,19 +468,19 @@ function add_plane(idx)
 			for i=1,#active_planes do
 				-- don't spawn close to other planes
 				local other_plane = planes[active_planes[i]]
-				if dist(self, other_plane) < 15 then
+				if dist(self, other_plane) < 20 then
 					is_any_plane_too_close = true
 					break
 				end
 			end
 
 			-- don't spawn close to the airport
-			if dist(self, airport) < 75 then is_any_plane_too_close = true end
+			if dist(self, airport) < 40 then is_any_plane_too_close = true end
 
 			if is_any_plane_too_close then
 				-- put this in a conditional
-				pos = rnd() * 256
-				opos = rnd({0, 256})
+				pos = flr(rnd() * 160)+32
+				opos = rnd({0, 192})
 				x_or_y = rnd()
 		
 				if x_or_y < 0.5 then
