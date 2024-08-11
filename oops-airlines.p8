@@ -36,6 +36,10 @@ local point_lookup = { 30, 10, 20 }
 local flights_saved = { 0, 0, 0 } -- red, blue, yellow
 local flight_type = { RED=1, BLUE=2, YELLOW=3 }
 
+-- TODO: add menuitem() for "focus mode" -> only show one color node trail at a time
+-- TODO: add menuitem() for "unique planes" -> show planes with unique symbols instead of all the same
+-- TODO: change lil colored square in flight name to a series of triangles - 1 for red, 2 for blue, 3 for red - chr(23)
+
 -- camera
 local cam = nil
 
@@ -742,18 +746,34 @@ function draw_crosshair()
 	if mode == "PLAN" then spr(10, 28, 28) end
 end
 
+function draw_flight_speed(type)
+	if type == flight_type.RED then
+		-- draw one triangle
+		print(chr(23), 4, 1, 8)
+	elseif type == flight_type.BLUE then
+		-- draw two triangles
+		print(chr(23), 2, 1, 12)
+		print(chr(23), 5, 1, 12)
+	else
+		-- draw three triangles
+		print(chr(23), 1, 1, 10)
+		print(chr(23), 4, 1, 10)
+		print(chr(23), 7, 1, 10)
+	end
+end
+
 function draw_ui_overlay()
 	-- top hud
 	rectfill(0, 0, 63, 6, 0)
 
 	if mode == "FLIGHT" then
 		if cam.track_target ~= nil and cam.track_target.color ~= nil then
-			rectfill(0, 2, 2, 4, cam.track_target.color)
-			print(cam.track_target.code, 5, 1, 7)
+			draw_flight_speed(cam.track_target.type)
+			print(cam.track_target.code, 11, 1, 7)
 		end
 	else
-		rectfill(0, 2, 2, 4, plan_plane.color)
-		print(plan_plane.code, 5, 1, 7)
+		draw_flight_speed(plan_plane.type)
+		print(plan_plane.code, 11, 1, 7)
 	end
 
 	local points_str = tostr(points)..chr(146)
