@@ -139,9 +139,9 @@ function game_update()
 	end
 
 	if mode == "TUTORIAL" then
-		if btnp(0) and tutorial_page > 0 then tutorial_page -= 1 end
-		if btnp(1) and tutorial_page < 4 then tutorial_page += 1 end
-		if btnp(4) then mode = "FLIGHT" end
+		if btnp(k_left) and tutorial_page > 0 then tutorial_page -= 1 end
+		if btnp(k_right) and tutorial_page < 4 then tutorial_page += 1 end
+		if btnp(k_primary) then mode = "FLIGHT" end
 		tutorial_offset = lerp(tutorial_offset, -tutorial_page*64, 0.3)
 
 	-- flight mode - just watch the planes fly - zoom out to pan, zoom back in to switch between planes
@@ -304,52 +304,59 @@ function game_draw()
 	end
 
 	if mode == "TUTORIAL" then
-		-- page controls
-		if tutorial_page > 0 then end -- TODO: print left arrow symbol
-		if tutorial_page < 5 then end -- TODO: print right arrow symbol
-		-- TODO: print confirm action symbol
+		rectfill(0, 0, 63, 63, 0)
 
 		-- page 1 (0)
-		rounded_rect(4+tutorial_offset, 4, 59+tutorial_offset, 59, 10, 0)
-		print("welcome to", 12+tutorial_offset, 8, 7)
-		print("oops airlines", 6+tutorial_offset, 14, 7)
-		print("help us!", 16+tutorial_offset, 24, 7)
-		print("guide our", 14+tutorial_offset, 34, 7)
-		print("planes back", 10+tutorial_offset, 40, 7)
-		print("to the hangar", 6+tutorial_offset, 46, 7)
+		print("welcome to", 12+tutorial_offset, 10, 7)
+		print("oops airlines!", 5+tutorial_offset, 16, 7)
+		local help_text = "help us!"
+		for i=1,#help_text do
+			print(help_text[i], 16+tutorial_offset+(i-1)*4, 26+sin(-t()*1.5+i/#help_text)*2, 8)
+		end
+		print("guide our", 14+tutorial_offset, 36, 7)
+		print("planes back", 10+tutorial_offset, 42, 7)
+		print("to the hangar", 6+tutorial_offset, 48, 7)
 
 		-- page 2 (64)
-		rounded_rect(68+tutorial_offset, 4, 123+tutorial_offset, 59, 10, 0)
 		print("draw a path", 74+tutorial_offset, 14, 7)
 		print("for each", 80+tutorial_offset, 20, 7)
 		print("plane to fly", 72+tutorial_offset, 26, 7)
-		print("use "..chr(139)..chr(145)..chr(148)..chr(131), 72+tutorial_offset, 36, 7)
+		print("use", 72+tutorial_offset, 36, 7)
+		print(chr(139)..chr(145)..chr(148)..chr(131), 88+tutorial_offset, 36, 9)
 		print("to get around", 70+tutorial_offset, 42, 7)
 
 		-- page 3 (128)
-		rounded_rect(132+tutorial_offset, 4, 187+tutorial_offset, 59, 10, 0)
 		print("drop a node", 138+tutorial_offset, 12, 7)
-		print("with "..chr(142), 144+tutorial_offset, 18, 7)
+		print("with ", 144+tutorial_offset, 18, 7)
+		print(chr(142), 164+tutorial_offset, 18, 9)
 		print("finish a path", 134+tutorial_offset, 28, 7)
 		print("by dropping", 138+tutorial_offset, 34, 7)
 		print("a node on", 142+tutorial_offset, 40, 7)
 		print("the runway!", 138+tutorial_offset, 46, 7)
 
 		-- page 4 (192)
-		rounded_rect(196+tutorial_offset, 4, 251+tutorial_offset, 59, 10, 0)
-		print("red planes", 204+tutorial_offset, 20, 7)
-		print("fly slowest", 202+tutorial_offset, 26, 7)
-		print("next is blue", 200+tutorial_offset, 32, 7)
-		print("then yellow", 202+tutorial_offset, 38, 7)
+		print("red planes", 204+tutorial_offset, 16, 8)
+		print("fly slowest", 202+tutorial_offset, 22, 7)
+		print("next is ", 200+tutorial_offset, 32, 7)
+		print("blue", 232+tutorial_offset, 32, 12)
+		print("then ", 202+tutorial_offset, 42, 7)
+		print("yellow", 222+tutorial_offset, 42, 10)
 
 		-- page 5 (256)
-		rounded_rect(260+tutorial_offset, 4, 315+tutorial_offset, 59, 10, 0)
 		print("score points", 264+tutorial_offset, 12, 7)
 		print("each time a", 266+tutorial_offset, 18, 7)
 		print("plane lands", 266+tutorial_offset, 24, 7)
 		print("the game ends", 262+tutorial_offset, 34, 7)
 		print("when planes", 266+tutorial_offset, 40, 7)
 		print("collide!", 272+tutorial_offset, 46, 7)
+
+		-- page controls
+		rectfill(0, 57, 63, 63, 5)
+		if tutorial_page > 0 then print(chr(139), 2, 58, 7) end -- left arrow symbol
+		if tutorial_page < 4 then print(chr(145), 55, 58, 7) end -- right arrow symbol
+		local tutorial_continue = " skip"
+		if tutorial_page == 4 then tutorial_continue = " done" end
+		print(chr(142)..tutorial_continue, 19, 58, 7) -- confirm action symbol
 	end
 end
 
@@ -800,14 +807,13 @@ local offset = 0
 local bgplanes = {{x=-16,smoke={}}, {x=-48,smoke={}}, {x=-80,smoke={}}, {x=-112,smoke={}}}
 
 function gameover_update()
-	if btnp(0) and page > 0 then page -= 1 end
-	if btnp(1) and page < 3 then page += 1 end
+	if btnp(k_left) and page > 0 then page -= 1 end
+	if btnp(k_right) and page < 3 then page += 1 end
 
-	if btnp(4) then 
+	if btnp(k_primary) then 
 		reset_game() 
 		bgplanes = {{x=-16,smoke={}}, {x=-48,smoke={}}, {x=-80,smoke={}}, {x=-112,smoke={}}}
 	end
-	if btnp(5) then end -- TODO: switch to main menu
 
 	-- update plane positions in background
 	for i=1,#bgplanes do
@@ -884,12 +890,9 @@ function gameover_draw()
 	print(chr(142), 0, 58, 7)
 	spr(13, 7, 56)
 
-	-- menu
-	print(chr(138)..chr(151), 49, 58, 7)
-
 	-- pagination buttons
-	if page > 0 then print(chr(139), 0, 40) end -- left
-	if page < 3 then print(chr(145), 57, 40) end -- right
+	if page > 0 then print(chr(139), 0, 40+sin(t()/4)*3) end -- left
+	if page < 3 then print(chr(145), 57, 40+sin(t()/4)*3) end -- right
 end
 
 -->8
