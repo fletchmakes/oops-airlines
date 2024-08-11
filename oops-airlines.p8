@@ -18,6 +18,8 @@ local k_secondary = 5
 -- easier time switching between game states
 local current_update = nil
 local current_draw = nil
+local mode = "FLIGHT" -- "FLIGHT", "PLAN", "GAMEOVER", "TUTORIAL"
+local last_mode = ""
 
 -- particle simulator list
 local particles = {}
@@ -35,10 +37,6 @@ local points = 0
 local point_lookup = { 30, 10, 20 }
 local flights_saved = { 0, 0, 0 } -- red, blue, yellow
 local flight_type = { RED=1, BLUE=2, YELLOW=3 }
-
--- TODO: add menuitem() for "focus mode" -> only show one color node trail at a time
--- TODO: add menuitem() for "unique planes" -> show planes with unique symbols instead of all the same
--- TODO: change lil colored square in flight name to a series of triangles - 1 for red, 2 for blue, 3 for red - chr(23)
 
 -- camera
 local cam = nil
@@ -74,6 +72,8 @@ local smol_letters = {
 local alphabet = split("a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r,s,t,u,v,w,x,y,z")
 local numerals = split("0,1,2,3,4,5,6,7,8,9")
 
+local focus_paths = false
+
 function _init()
 	-- 64x64
     poke(0x5f2c, 3)
@@ -97,7 +97,28 @@ function _init()
 	end
 
 	-- add menu items for restarting the game
+	focus_paths = false
 	menuitem(1, "new game", function() reset_game() end)
+	menuitem(2, "focus paths: off", toggle_focus_paths)
+	menuitem(3, "view tutorial", function() last_mode = mode mode = "TUTORIAL" end)
+end
+
+function toggle_focus_paths()
+	-- toggle
+	focus_paths = not focus_paths
+
+	-- remove old menu item
+	menuitem(2)
+
+	-- add new menu item
+	if focus_paths then
+		menuitem(2, "focus paths: on", toggle_focus_paths)
+	else
+		menuitem(2, "focus paths: off", toggle_focus_paths)
+	end
+
+	-- keep menu open
+	return true
 end
 
 function _update()
@@ -116,7 +137,6 @@ end
 -->8
 -- gameplay
 
-local mode = "FLIGHT" -- "FLIGHT", "PLAN", "GAMEOVER", "TUTORIAL"
 local plane_spawn_timer = 10
 local hangar = {x=192, y=126}
 
@@ -145,7 +165,7 @@ function game_update()
 	if mode == "TUTORIAL" then
 		if btnp(k_left) and tutorial_page > 0 then tutorial_page -= 1 end
 		if btnp(k_right) and tutorial_page < 4 then tutorial_page += 1 end
-		if btnp(k_primary) then mode = "FLIGHT" end
+		if btnp(k_primary) then mode = last_mode end
 		tutorial_offset = lerp(tutorial_offset, -tutorial_page*64, 0.3)
 
 	-- flight mode - just watch the planes fly - zoom out to pan, zoom back in to switch between planes
@@ -365,9 +385,7 @@ function game_draw()
 		rectfill(0, 57, 63, 63, 5)
 		if tutorial_page > 0 then print(chr(139), 2, 58, 7) end -- left arrow symbol
 		if tutorial_page < 4 then print(chr(145), 55, 58, 7) end -- right arrow symbol
-		local tutorial_continue = " skip"
-		if tutorial_page == 4 then tutorial_continue = " done" end
-		print(chr(142)..tutorial_continue, 19, 58, 7) -- confirm action symbol
+		print(chr(142).." done", 19, 58, 7) -- confirm action symbol
 	end
 end
 
@@ -667,10 +685,13 @@ function add_plane(idx)
 		if self.status ~= "ROUTING" then return end
 		if self.next_node == nil then return end
 
-		-- default to gray
+		-- draw unfocused paths as gray, and the focused path in the plane's color
 		local draw_col = 6
 		if mode == "PLAN" and plan_plane.idx == self.idx then draw_col = self.color end
 		if cam.track_target ~= nil and cam.track_target.idx == self.idx then draw_col = self.color end
+
+		-- disregard focus path colors if the option is off
+		if focus_paths == false then draw_col = self.color end
 
 		-- draw current heading
 		line(self.x+8, self.y+8, self.next_node.x+8, self.next_node.y+8, draw_col)
