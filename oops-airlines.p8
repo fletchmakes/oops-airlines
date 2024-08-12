@@ -513,9 +513,8 @@ function add_plane(idx)
 			if dist(self, airport) < 40 then is_any_plane_too_close = true end
 
 			if is_any_plane_too_close then
-				-- put this in a conditional
 				pos = flr(rnd() * 160)+32
-				opos = rnd({0, 192})
+				opos = rnd({32, 192})
 				x_or_y = rnd()
 		
 				if x_or_y < 0.5 then
