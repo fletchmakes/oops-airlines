@@ -993,6 +993,7 @@ function new_camera()
 
 	c.zoom = 1
 	c.zoom_target = 1
+	c.last_zoom_target = 1
 
 	c.update = function(self)
 		-- item needs immediate focus, so we ignore everything else
@@ -1034,34 +1035,38 @@ function new_camera()
 			end
 
 			-- rotate through the list of active planes for tracking
-			if btnp(k_left) and #active_planes > 0 then
-				if self.track_target == nil then self.track_target = planes[active_planes[1]] return end
+			if btnp(k_left) then
+				if #active_planes > 1 then
+					if self.track_target == nil then self.track_target = planes[active_planes[1]] return end
 
-				local cursor = 1
-				while cursor ~= #active_planes do
-					if planes[active_planes[cursor]].idx == self.track_target.idx then break end
-					cursor += 1
-				end
+					local cursor = 1
+					while cursor ~= #active_planes do
+						if planes[active_planes[cursor]].idx == self.track_target.idx then break end
+						cursor += 1
+					end
 
-				cursor -= 1
-				if cursor == 0 then cursor = #active_planes end
+					cursor -= 1
+					if cursor == 0 then cursor = #active_planes end
 
-				self.track_target = planes[active_planes[cursor]]
+					self.track_target = planes[active_planes[cursor]]
+				else sfx(3) end
 			end
 
-			if btnp(k_right) and #active_planes > 0 then
-				if self.track_target == nil then self.track_target = planes[active_planes[#active_planes]] return end
+			if btnp(k_right) then
+				if #active_planes > 1 then
+					if self.track_target == nil then self.track_target = planes[active_planes[#active_planes]] return end
 
-				local cursor = 1
-				while cursor ~= #active_planes do
-					if planes[active_planes[cursor]].idx == self.track_target.idx then break end
+					local cursor = 1
+					while cursor ~= #active_planes do
+						if planes[active_planes[cursor]].idx == self.track_target.idx then break end
+						cursor += 1
+					end
+
 					cursor += 1
-				end
+					if cursor > #active_planes then cursor = 1 end
 
-				cursor += 1
-				if cursor > #active_planes then cursor = 1 end
-
-				self.track_target = planes[active_planes[cursor]]
+					self.track_target = planes[active_planes[cursor]]
+				else sfx(3) end
 			end
 		end
 		
@@ -1086,19 +1091,23 @@ function new_camera()
 
 		-- handle zooming
 		if btn(k_secondary) then
-			cam.zoom_target = 0.5
+			self.zoom_target = 0.5
 			self.is_tracking = false
 
 			if self.x < 0 then self.x = lerp(self.x, 0, 0.2) end
 			if self.x > 128 then self.x = lerp(self.x, 128, 0.2) end
 			if self.y < 0 then self.y = lerp(self.y, 0, 0.2) end
 			if self.y > 128 then self.y = lerp(self.y, 128, 0.2) end
+
+			if self.zoom_target ~= self.last_zoom_target then sfx(0) end
 		else
-			cam.zoom_target = 1
+			self.zoom_target = 1
 			if mode == "FLIGHT" then self.is_tracking = true end
+			if self.zoom_target ~= self.last_zoom_target then sfx(1) end
 		end
 
 		self.zoom = lerp(self.zoom, self.zoom_target, 0.2)
+		self.last_zoom_target = self.zoom_target
 	end
 
 	-- draw the camera to a location, and stop being drawn towards the tracked target
@@ -1688,10 +1697,10 @@ __map__
 3839383938393839383938393839383938393a3b383938393839383938393839000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 4849484948494849484948494849484948494a4b484948494849484948494849000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 __sfx__
-050400000000200002000020000200002000020000200002000020000200002000020000200002000020000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-05040000180021800218002180051c0021c0021c0021c002000020000200002000020000200002000020000200002000020000200002000020000200002000020000200002000020000200002000020000200002
+490400001c0541d0511f0512105123051240512603128011000020000200002000020000200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+4904000028054260512405123051210511f0511d0311c011000020000200002000020000200002000020000200002000020000200002000020000200002000020000200002000020000200002000020000200002
 4908000028072280722b0722b07230072300723007230072300523003200002000020000200002000020000200002000020000200002000020000200002000020000200002000020000200002000020000200002
-4d0300001800018000180001800013000130001300013000000020000200002000020000200002000020000200002000020000200002000020000200002000020000200002000020000200002000020000200002
+050300001005010050100551000013000100501005010055000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 010200001a0050b0010160101601016010c0010c0010c0010d0010d0010d0010e0010f00111001130010000100001000010000100001000010000100001000010000100001000010000100001000000000000000
 010200001a005016010360101601016010c0010c0010c0010d0010d0010d0010e0010f00111001130010000100001000010000100001000010000100001000010000100001000010000100001000000000000000
 010200001a005016010160101601016010c0010c0010c0010d0010d0010d0010e0010f00111001130010000100001000010000100001000010000100001000010000100001000010000100001000000000000000
