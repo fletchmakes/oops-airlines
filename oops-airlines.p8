@@ -503,7 +503,7 @@ function add_plane(idx)
 			for i=1,#active_planes do
 				-- don't spawn close to other planes
 				local other_plane = planes[active_planes[i]]
-				if dist(self, other_plane) < 20 then
+				if dist(self, other_plane) < 30 then
 					is_any_plane_too_close = true
 					break
 				end
@@ -546,7 +546,7 @@ function add_plane(idx)
 
 	plane.update = function(self)
 		-- check if we're landing
-		if self.status == "ROUTING" and dist(self, airport) < 6 then
+		if self.status == "ROUTING" and dist(self, airport) < 7 then
 			self.status = "LANDING"
 		end
 
