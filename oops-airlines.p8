@@ -97,7 +97,7 @@ function _init()
 	current_draw = splashscreen_draw
 
 	-- get 10 planes pooled and ready to be activated
-	for i=1,3 do
+	for i=1,10 do
 		add_plane(i)
 	end
 
@@ -494,7 +494,7 @@ function add_plane(idx)
 		self.status = "IDLE"
 
 		local pos = flr(rnd() * 160)+32
-		local opos = rnd({0, 192})
+		local opos = rnd({32, 192})
 		local x_or_y = rnd()
 
 		if x_or_y < 0.5 then
@@ -835,6 +835,7 @@ function reset_game()
 	for i=1,10 do
 		planes[i].x = -100
 		planes[i].y = -100
+		planes[i].zone = -999
 		planes[i].status = "POOLED"
 		planes[i].nodes = _qnew()
 		planes[i].next_node = nil
