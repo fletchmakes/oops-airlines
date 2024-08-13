@@ -43,6 +43,10 @@ local flights_saved = { 0, 0, 0 } -- red, blue, yellow
 local flight_type = { RED=1, BLUE=2, YELLOW=3 }
 local flight_designations = { "rd", "bl", "yw"}
 
+-- input blocking
+local _btn, _btnp = btn, btnp
+local input_blocker = false
+
 -- camera
 local cam = nil
 
@@ -142,7 +146,7 @@ end
 -->8
 -- gameplay
 
-local plane_spawn_timer = 10
+local plane_spawn_timer = 30
 local hangar = {x=192, y=128}
 local airport = {x=186, y=128}
 
@@ -175,11 +179,9 @@ function game_update()
 		tutorial_offset = lerp(tutorial_offset, -tutorial_page*64, 0.3)
 
 	-- flight mode - just watch the planes fly - zoom out to pan, zoom back in to switch between planes
-	elseif mode == "FLIGHT" then
+	elseif mode == "FLIGHT" and animation.is_animating == false then
 		plane_spawn_timer -= 1
-		if plane_spawn_timer <= 0 and #active_planes < #planes then -- prevent overflowing the pool
-			plane_spawn_timer = 100 + flr(rnd()*100)
-	
+		if plane_spawn_timer <= 0 then -- prevent overflowing the pool  and #active_planes < #planes	
 			-- find a plane to spawn (one that is pooled)
 			for i=1,#planes do
 				local p = planes[i]
@@ -200,6 +202,8 @@ function game_update()
 					break
 				end
 			end
+
+			plane_spawn_timer = 150 + flr(rnd()*100)
 		end
 
 		-- update the planes
@@ -622,7 +626,7 @@ function add_plane(idx)
 			self.x -= cos(self.theta) * self.speed
 			self.y -= sin(self.theta) * self.speed
 
-			if self.x > 32 and self.x < 192 and self.y > 32 and self.y < 192 then
+			if self.x >= 32 and self.x <= 192 and self.y >= 32 and self.y <= 192 then
 				-- activate PLAN mode for this plane
 				self.status = "ROUTING"
 				switch_to_plan(self)
@@ -863,7 +867,7 @@ function reset_game()
 	add(animation.draw_me, flags)
 
 	mode = "FLIGHT"
-	plane_spawn_timer = 10
+	plane_spawn_timer = 30
 	animation.queue = _qnew()
 	_qpush(animation.queue, cocreate(fade_in()))
 
@@ -1235,6 +1239,7 @@ end
 -- returns a function to be used with cocreate()
 function fly_text()
 	return function()
+		input_blocker = true
 		local frames = 0
 		local gravity = 0.2
 		local y = {64, 64, 64, 64}
@@ -1255,11 +1260,13 @@ function fly_text()
 
 			yield()
 		end
+		input_blocker = false
 	end
 end
 
 function plan_text()
 	return function()
+		input_blocker = true
 		local frames = 0
 		local gravity = 0.2
 		local y = {64, 64, 64, 64, 64}
@@ -1282,21 +1289,25 @@ function plan_text()
 
 			yield()
 		end
+		input_blocker = false
 	end
 end
 
 function wait(seconds)
 	return function()
+		input_blocker = true
 		local frame = 30 * seconds
 		while frame > 0 do
 			frame -= 1
 			yield()
 		end
+		input_blocker = false
 	end
 end
 
 function fade_to_black()
 	return function()
+		input_blocker = true
 		local r = 100
 		while r > 1 do
 			yield()
@@ -1305,26 +1316,31 @@ function fade_to_black()
 			circfill(32,32,r,0 | 0x1800)
 			poke(0x5f34, peek(0x5f34 & ~0x2))
 		end
+		input_blocker =  false
 	end
 end
 
 function fade_in()
 	return function()
+		input_blocker = true
 		rectfill(0, 0, 63, 63, 0)
 
-		local r = 100
-		while r > 1 do
+		local r = 0
+		while r < 60 do
 			yield()
-			r = lerp(r, 0, 0.02)
+			r += 3
 			poke(0x5f34,0x2)
-			circfill(32,32,100-r,0 | 0x1800)
+			circfill(32,32,r,0 | 0x1800)
 			poke(0x5f34, peek(0x5f34 & ~0x2))
 		end
+		input_blocker = false
 	end
 end
 
 function animate_gameover_screen()
 	return function()
+		input_blocker = true
+
 		local titley, scorey = -25, 64
 		local titledy, scoredy = 0, 0
 		local frame = 0
@@ -1353,6 +1369,7 @@ function animate_gameover_screen()
 
 		current_update = gameover_update
 		current_draw = gameover_draw
+		input_blocker = false
 	end
 end
 
@@ -1402,6 +1419,16 @@ function rounded_rect(x1, y1, x2, y2, r, c)
     circfill(x2-r, y2-r, r, c)
     rectfill(x1+r, y1, x2-r, y2, c)
     rectfill(x1, y1+r, x2, y2-r, c)
+end
+
+function btn(num)
+	if input_blocker then return end
+	return _btn(num)
+end
+
+function btnp(num)
+	if input_blocker then return end
+	return _btnp(num)
 end
 
 -- https://www.lua.org/pil/11.4.html
