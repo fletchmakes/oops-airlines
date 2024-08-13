@@ -27,6 +27,7 @@ local last_mode = ""
 
 -- particle simulator list
 local particles = {}
+local score_particles = {}
 
 -- plane related tracking
 local planes = {}
@@ -397,6 +398,9 @@ function game_draw()
 		if tutorial_page < 4 then print(chr(145), 55, 58, 7) end -- right arrow symbol
 		print(chr(142).." done", 19, 58, 7) -- confirm action symbol
 	end
+
+	-- point tracking
+	resolve_score_particles()
 end
 
 function switch_to_plan(plane_to_track)
@@ -618,6 +622,7 @@ function add_plane(idx)
 				cam.set_new_target(cam, self.idx)
 
 				points += point_lookup[self.type]
+				create_score_particle(point_lookup[self.type])
 				flights_saved[self.type] += 1
 			end
 		
@@ -1411,6 +1416,31 @@ function resolve_particles()
 
         if p.ttl <= 0 then deli(particles, i) end
     end
+end
+
+function resolve_score_particles()
+	if #score_particles < 1 then return end
+
+	for i=#score_particles,1,-1 do
+		local sp = score_particles[i]
+		local y = #score_particles*6+7
+
+		sp.x = lerp(sp.x, sp.fx, 0.2)
+
+		rectfill(sp.x-1, y-1, 63, y+5, 0)
+		print(sp.text, sp.x, y, 7)
+
+		if sp.x == sp.fx then deli(score_particles, i) end
+	end
+end
+
+function create_score_particle(num_points)
+	local ptstr = tostr(num_points)
+	add(score_particles, {
+		x=64,
+		fx=64-#ptstr*4-7,
+		text=ptstr..chr(146)
+	})
 end
 
 function rounded_rect(x1, y1, x2, y2, r, c)
