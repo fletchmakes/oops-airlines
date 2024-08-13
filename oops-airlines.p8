@@ -827,6 +827,7 @@ function draw_ui_overlay()
 
 	if mode == "FLIGHT" then
 		spr(11, 0, 56)
+		print(flr(plane_spawn_timer/30), 9, 58, 7)
 
 		if cam.zoom_target == 1 then
 			print(chr(139)..chr(145)..chr(151), 41, 58, 7)
@@ -1423,12 +1424,11 @@ function resolve_score_particles()
 
 	for i=#score_particles,1,-1 do
 		local sp = score_particles[i]
-		local y = #score_particles*6+7
 
 		sp.x = lerp(sp.x, sp.fx, 0.2)
 
-		rectfill(sp.x-1, y-1, 63, y+5, 0)
-		print(sp.text, sp.x, y, 7)
+		rectfill(sp.x-1, sp.y-1, 63, sp.y+5, 0)
+		print(sp.text, sp.x, sp.y, 7)
 
 		if sp.x == sp.fx then deli(score_particles, i) end
 	end
@@ -1438,6 +1438,7 @@ function create_score_particle(num_points)
 	local ptstr = tostr(num_points)
 	add(score_particles, {
 		x=64,
+		y=#score_particles*6+7,
 		fx=64-#ptstr*4-7,
 		text=ptstr..chr(146)
 	})
