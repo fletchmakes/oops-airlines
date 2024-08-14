@@ -478,8 +478,7 @@ function add_plane(idx)
 		end
 
 		-- check if we've clicked the airfield
-		local dist_to_hangar = dist({x=x, y=y}, airport)
-		if dist_to_hangar < 6 then
+		if is_in_landing_zone({x=x+7, y=y+7}) then
 			switch_to_flight()
 		else
 			sfx(5)
@@ -562,16 +561,21 @@ function add_plane(idx)
 
 	plane.update = function(self)
 		-- check if we're landing
-		if self.status == "ROUTING" and dist(self, airport) < 7 then
+		local plane_center = {x=flr(self.x)+7,y=flr(self.y)+7}
+		if self.status == "ROUTING" and is_in_landing_zone(plane_center) then
 			self.status = "LANDING"
 		end
 
 		if self.status == "ROUTING" then
 			-- check if we reached our next node
 			if dist(self, self.next_node) < self.speed then
-				_qdequeue(self.nodes) -- remove the current entry
+				local last_node = _qdequeue(self.nodes) -- remove the current entry
+				self.x, self.y = last_node.x, last_node.y
 				self.next_node = _qpeek(self.nodes)
-				self.theta = angle(self, self.next_node)
+				if self.next_node ~= nil then 
+					self.theta = angle(self, self.next_node) 
+				end
+				
 			end
 			
 			-- move towards destination
@@ -789,7 +793,8 @@ end
 function draw_crosshair()
 	if mode == "PLAN" then 
 		-- about to end planning phase
-		if dist(cam.get_reticle(cam), {x=airport.x+8,y=airport.y+8}) < 5.5 then
+		local reticle = cam.get_reticle(cam)
+		if is_in_landing_zone(reticle) then
 			spr(15, 28, 28)
 			spr(95, 38, 28)
 			return
@@ -1187,7 +1192,7 @@ function new_camera()
 
 	-- gets the center of the screen
 	c.get_reticle = function(self)
-		return {x=self.x+63, y=self.y+63}
+		return {x=flr(self.x)+63, y=flr(self.y)+63}
 	end
 
 	return c
@@ -1417,6 +1422,18 @@ end
 -- assumes a and b are tables with members x and y
 function angle(a, b)
 	return atan2(a.x-b.x, a.y-b.y)
+end
+
+-- point is a table with form {x=0,y=0}
+function is_in_landing_zone(point)
+	if point.x > airport.x+6 and
+	   point.x <= airport.x+12 and
+	   point.y > airport.y and
+	   point.y <= airport.y+15 then
+			return true
+	end
+
+	return false
 end
 
 -- particle system
